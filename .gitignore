@@ -1,0 +1,5 @@
+# Ignore zip files
+*.zip
+
+# Ignore rar files
+*.rar

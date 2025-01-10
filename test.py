@@ -1,7 +1,6 @@
 import openai
 
 # Set your API key
-openai.api_key = "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"
 
 # Assistant A
 def get_fabia(user_message: str) -> str:
