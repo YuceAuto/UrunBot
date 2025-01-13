@@ -1,11 +1,9 @@
-from flask import Flask, jsonify
 import os
+import base64
 
-ROOT_DIR = os.path.abspath(os.curdir)
-ASSET_DIR = ROOT_DIR[:-7]
 class ImagePaths:
     """
-    A simple class to maintain a dictionary of image names and their paths or URLs.
+    A simple class to maintain a dictionary of image names and their paths or image data.
     """
     def __init__(self):
         # Initialize an empty dictionary or pre-populate if desired
@@ -13,19 +11,32 @@ class ImagePaths:
 
     def add_image(self, name, path):
         """
-        Add or update an image entry in the dictionary.
-        
+        Add or update an image entry in the dictionary. This reads the image from disk,
+        encodes it in base64, and stores it under the given name.
+
         :param name: Name or key for the image.
-        :param path: The file path or URL to the image.
+        :param path: The file path to the image.
+        :raises FileNotFoundError: If the specified file does not exist.
         """
-        self._images[name] = path
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"The file '{path}' does not exist.")
+        
+        # Read the image file in binary mode
+        with open(path, 'rb') as f:
+            image_data = f.read()
+        
+        # Encode the binary data as base64
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+        
+        # Store the base64 string in the dictionary
+        self._images[name] = image_base64
 
     def get_image(self, name):
         """
-        Retrieve the path/URL of an image by name.
+        Retrieve the BASE64-encoded image data by exact name.
         
         :param name: Name or key for the image.
-        :return: The path (string) if found, or None if not found.
+        :return: The base64-encoded string if found, or None if not found.
         """
         return self._images.get(name)
 
@@ -33,7 +44,7 @@ class ImagePaths:
         """
         Retrieve a copy of the entire dictionary of images.
         
-        :return: A dictionary of all image entries (name -> path).
+        :return: A dictionary of all image entries (name -> base64-encoded string).
         """
         return dict(self._images)
 
@@ -42,18 +53,23 @@ class ImagePaths:
         Retrieve images whose names contain the given keyword (case-insensitive).
 
         :param keyword: The search keyword to look for in the image name.
-        :return: A list of (name, path) tuples for matching images.
+        :return: A list of (name, base64_string) tuples for matching images.
         """
         results = []
         lower_keyword = keyword.lower()
-        for name, path in self._images.items():
+        for name, base64_str in self._images.items():
             if lower_keyword in name.lower():
-                results.append((name, path))
+                results.append((name, base64_str))
         return results
 
-if __name__ == "__main__":
-
-    images = ImagePaths()
+def load_all_images(image_storage):
+    """
+    Automatically add all Fabia, Scala, and Kamiq images to the provided ImagePaths instance.
+    Adjust the paths as needed.
+    """
+    ROOT_DIR = os.path.abspath(os.curdir)
+    # Example from your code. If you need a different approach, update ASSET_DIR accordingly.
+    ASSET_DIR = ROOT_DIR[:-7]  
 
     # FABIA
     images.add_image("Fabia Monte Carlo Ay Beyazı", ASSET_DIR+"assets\\images\\fabia\\Fabia Monte Carlo Ay Beyazı.png")
@@ -174,3 +190,9 @@ if __name__ == "__main__":
     images.add_image("Kamiq Premium Suite Opsiyonel Ön Dekor", ASSET_DIR+"assets\\images\\kamiq\\Kamiq Premium Suite Opsiyonel Ön Dekor.png")
     images.add_image("Kamiq Premium Suite Opsiyonel Ön Konsol", ASSET_DIR+"assets\\images\\kamiq\\Kamiq Premium Suite Opsiyonel Ön Konsol.png")
     images.add_image("Kamiq Yarış Mavisi", ASSET_DIR+"assets\\images\\kamiq\\Kamiq Yarış Mavisi.png")
+
+# 1. Create a global 'images' instance
+images = ImagePaths()
+
+# 2. Automatically populate it with Fabia, Scala, Kamiq
+load_all_images(images)
