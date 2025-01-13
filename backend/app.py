@@ -1,152 +1,190 @@
 import os
 import time
+import logging
 from concurrent.futures import ThreadPoolExecutor
+
+from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from openai import OpenAI
-from dotenv import load_dotenv
 
-# Import the class (not as an instance).
+from fuzzywuzzy import fuzz, process  # If you need fuzzy matching
+from openai import OpenAI
+
+# Import the ImagePaths class (not as an instance).
 from image_paths import ImagePaths
 
 load_dotenv()
 
+
 class ChatbotAPI:
     def __init__(self, openai_key=None):
         """
-        ChatbotAPI class manages the interaction with OpenAI's API 
-        and handles user requests via the Flask application.
-        
-        :param openai_key: (Optional) Provide the API key directly 
-                           or rely on the environment variable.
+        ChatbotAPI class manages the interaction with OpenAI's API,
+        handles user requests via the Flask application,
+        and includes logic for assistant selection and image storage.
         """
-        # Load the OpenAI API key from an environment variable if not provided explicitly
+
+        # 1. Load the OpenAI API key from environment (or a passed-in parameter).
         self.openai_key = openai_key or os.environ.get("OPENAI_API_KEY", "")
         if not self.openai_key:
             raise ValueError("No OpenAI API key provided. Please set OPENAI_API_KEY as an environment variable.")
 
-        # Initialize the OpenAI client
         self.client = OpenAI(api_key=self.openai_key)
-        self.image_dict = ImagePaths()
 
-        # Create the Flask application
+        # 2. Create a logger for debugging/info purposes.
+        logging.basicConfig(level=logging.INFO)
+        self.logger = logging.getLogger(__name__)
+
+        # 3. Create an instance of the Flask application and enable CORS.
         self.app = Flask(__name__)
         CORS(self.app)
 
-        # Assistant IDs
-        self.ASSISTANT_IDS = [
-            "asst_1qGG7y8w6QcupPETaYQRdGsI",  # Skoda Kamiq Bot
-            "asst_I7YubD3Cy6qU4kCc32mbYjUQ",  # Skoda Fabia Bot
-            "asst_Ul4gzwnyRZxNcb3I5ot93lo9",  # Skoda Scala Bot
-        ]
+        # 4. Create an instance of ImagePaths (optional usage).
+        #    You can add or remove images as needed.
+        self.image_storage = ImagePaths()
+        # Example: self.image_storage.add_image("Kamiq Image", "assets/images/kamiq/kamiq_example.png")
 
-        # Create an instance of ImagePaths and populate it
-        
-        self.IMAGE_DICT = self.image_dict._images
+        # Store all images if you want a quick reference (optional).
+        self.IMAGE_DICT = self.image_storage.list_images()
 
-        # Relevant keywords
+        # 5. Assistant configuration and relevant keywords
+        self.ASSISTANT_CONFIG = {
+            "asst_1qGG7y8w6QcupPETaYQRdGsI": ["Kamiq"],  # Skoda Kamiq Bot
+            "asst_yeDl2aiHy0uoGGjHRmr2dlYB": ["Fabia"],  # Skoda Fabia Bot
+            "asst_njSG1NVgg4axJFmvVYAIXrpM": ["Scala"],  # Skoda Scala Bot
+        }
         self.RELEVANT_KEYWORDS = ["Kamiq", "Fabia", "Scala"]
 
-        # Define Flask routes
+        # 6. Track the active assistant across requests
+        self.active_assistant_id = None
+
+        # 7. Define Flask routes
         self._define_routes()
 
     def _define_routes(self):
         """
         Define all Flask routes within this method.
         """
+
         @self.app.route("/", methods=["GET"])
         def home():
-            return self.home_route()
+            """
+            GET '/' endpoint
+            """
+            return "Chatbot API is running. Please POST your questions to the /ask endpoint."
 
         @self.app.route("/ask", methods=["POST"])
         def ask():
-            return self.ask_route()
+            """
+            POST '/ask' endpoint: The main logic for routing user questions
+            to the correct assistant and tracking the active assistant.
+            """
+            return self._handle_ask_route()
 
-    def home_route(self):
+    def _handle_ask_route(self):
         """
-        GET '/' endpoint:
+        Internal method for the '/ask' route to keep the code organized.
         """
-        return "Chatbot API is running. Please POST your questions to the /ask endpoint."
+        data = request.json
+        user_message = data.get("question", "")
+
+        if not user_message:
+            return jsonify({"response": "Lütfen bir soru girin."})
+
+        self.logger.info(f"Kullanıcı mesajı: {user_message}")
+
+        # Check for relevant keywords in user's message (simple approach).
+        relevant_keywords = ["kamiq", "scala", "fabia"]
+        if not any(keyword.lower() in user_message.lower() for keyword in relevant_keywords):
+            # If no keyword is found and there's no active assistant yet,
+            # ask for more detail.
+            if not self.active_assistant_id:
+                self.logger.info("Anahtar kelime bulunamadı. Daha fazla detay istendi.")
+                return jsonify({"response": "Talebinizi daha detaylı girerseniz size yardımcı olabilirim."})
+
+            # If there's an active assistant, use it.
+            self.logger.info(f"Aktif asistan: {self.active_assistant_id}. Aynı asistandan yanıt alınıyor.")
+            _, response = self.process_assistant(self.active_assistant_id, user_message)
+            return jsonify({"response": response})
+
+        # If message contains a relevant keyword, see if we match a known assistant
+        for assistant_id, keywords in self.ASSISTANT_CONFIG.items():
+            if any(keyword.lower() in user_message.lower() for keyword in keywords):
+                self.active_assistant_id = assistant_id
+                self.logger.info(f"Direkt olarak {assistant_id} asistanına yönlendiriliyor.")
+                _, response = self.process_assistant(assistant_id, user_message)
+                return jsonify({"response": response})
+
+        # No direct assistant matched; fallback to the previously active one if any
+        if self.active_assistant_id:
+            self.logger.info(f"Aktif asistan: {self.active_assistant_id}. Aynı asistandan yanıt alınıyor.")
+            _, response = self.process_assistant(self.active_assistant_id, user_message)
+            return jsonify({"response": response})
+
+        # Parallel fallback if no assistant is active
+        with ThreadPoolExecutor(max_workers=len(self.ASSISTANT_CONFIG)) as executor:
+            results = list(executor.map(
+                lambda aid: self.process_assistant(aid, user_message),
+                self.ASSISTANT_CONFIG.keys()
+            ))
+
+        # Find a relevant answer
+        for assistant_id, content in results:
+            if content:  # if we got a response
+                self.active_assistant_id = assistant_id
+                self.logger.info(f"Asistan {assistant_id} için anahtar kelimeler: {self.ASSISTANT_CONFIG.get(assistant_id, [])}")
+                return jsonify({"response": content})
+
+        self.logger.warning("Hiçbir asistan uygun bir yanıt veremedi.")
+        return jsonify({"response": "Hiçbir asistan uygun bir yanıt veremedi."})
 
     def process_assistant(self, assistant_id, user_message):
         """
-        Handles the user message for a single assistant 
-        and returns the relevant response if any.
-
-        :param assistant_id: The ID of the assistant to query.
-        :param user_message: The user's question or message.
-        :return: A tuple of (assistant_id, response) if relevant; otherwise (assistant_id, None).
+        Query the specified assistant with user_message and 
+        return (assistant_id, response) if relevant, else (assistant_id, None).
         """
         try:
-            # Create a thread for the conversation
+            # Create a thread for conversation
             thread = self.client.beta.threads.create(
                 messages=[{"role": "user", "content": user_message}]
             )
-            print(f"👉 Thread Created (Assistant: {assistant_id}): {thread.id}")
+            self.logger.info(f"👉 Thread Created (Assistant: {assistant_id}): {thread.id}")
 
-            # Start a run for the created thread
+            # Start the run
             run = self.client.beta.threads.runs.create(
-                thread_id=thread.id, 
+                thread_id=thread.id,
                 assistant_id=assistant_id
             )
-            print(f"👉 Run Started (Assistant: {assistant_id}): {run.id}")
+            self.logger.info(f"👉 Run Started (Assistant: {assistant_id}): {run.id}")
 
-            # Wait until the run is completed or timeout (10 seconds)
+            # Wait until completion or timeout
             start_time = time.time()
             run_status = "queued"
             while run_status != "completed":
-                if time.time() - start_time > 10:  # Timeout: 10 seconds
+                if time.time() - start_time > 10:  # 10-second timeout
                     raise TimeoutError(f"Timeout for assistant {assistant_id}.")
                 run = self.client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
                 run_status = run.status
-                time.sleep(0.2)  # Sleep to avoid rapid polling
+                time.sleep(0.2)
 
             # Retrieve all messages from the thread
-            message_response = self.client.beta.threads.messages.list(thread_id=thread.id)
-            messages = message_response.data
-            latest_message = next((msg for msg in messages if msg.role == "assistant"), None)
+            msg_resp = self.client.beta.threads.messages.list(thread_id=thread.id)
+            messages = msg_resp.data
+            latest_msg = next((m for m in messages if m.role == "assistant"), None)
 
-            # Process the assistant's latest message
-            if latest_message and latest_message.content:
-                content = latest_message.content
+            if latest_msg and latest_msg.content:
+                content = latest_msg.content
                 content_text = " ".join(str(c) for c in content) if isinstance(content, list) else str(content)
 
-                # Check if the message is relevant (contains any relevant keyword)
+                # Check relevance
                 if any(keyword.lower() in content_text.lower() for keyword in self.RELEVANT_KEYWORDS):
                     return assistant_id, content_text
 
             return assistant_id, None
 
         except Exception as e:
-            print(f"❗ Error (Assistant: {assistant_id}): {str(e)}")
+            self.logger.error(f"❗ Error (Assistant: {assistant_id}): {str(e)}")
             return assistant_id, None
-
-    def ask_route(self):
-        """
-        POST '/ask' endpoint:
-        Receives the user question, queries all assistants in parallel, 
-        and returns the first relevant response (if any).
-        """
-        data = request.json
-        user_message = data.get("question", "")
-
-        if not user_message:
-            return jsonify({"response": "Please provide a valid question."})
-
-        # Process each assistant in parallel
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            results = list(executor.map(
-                lambda aid: self.process_assistant(aid, user_message), 
-                self.ASSISTANT_IDS
-            ))
-
-        # Find the first relevant response
-        relevant_response = next((content for assistant_id, content in results if content), None)
-
-        if relevant_response:
-            return jsonify({"response": relevant_response})
-        else:
-            return jsonify({"response": "No assistant provided a relevant answer."})
 
     def run(self, debug=True):
         """
@@ -155,7 +193,7 @@ class ChatbotAPI:
         self.app.run(debug=debug)
 
 
+# If you want to run this module directly:
 if __name__ == "__main__":
-    # Optionally, you can pass openai_key directly or just rely on the environment variable.
     chatbot_api = ChatbotAPI()
     chatbot_api.run(debug=True)
