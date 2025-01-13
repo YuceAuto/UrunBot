@@ -6,8 +6,10 @@ from flask_cors import CORS
 from openai import OpenAI
 from dotenv import load_dotenv
 
-load_dotenv()
+# Import the class (not as an instance).
+from image_paths import ImagePaths
 
+load_dotenv()
 
 class ChatbotAPI:
     def __init__(self, openai_key=None):
@@ -25,6 +27,7 @@ class ChatbotAPI:
 
         # Initialize the OpenAI client
         self.client = OpenAI(api_key=self.openai_key)
+        self.image_dict = ImagePaths()
 
         # Create the Flask application
         self.app = Flask(__name__)
@@ -36,6 +39,10 @@ class ChatbotAPI:
             "asst_I7YubD3Cy6qU4kCc32mbYjUQ",  # Skoda Fabia Bot
             "asst_Ul4gzwnyRZxNcb3I5ot93lo9",  # Skoda Scala Bot
         ]
+
+        # Create an instance of ImagePaths and populate it
+        
+        self.IMAGE_DICT = self.image_dict._images
 
         # Relevant keywords
         self.RELEVANT_KEYWORDS = ["Kamiq", "Fabia", "Scala"]
