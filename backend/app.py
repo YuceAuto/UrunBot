@@ -5,7 +5,7 @@ from flask_cors import CORS
 from openai import OpenAI
 
 # OpenAI API Client oluştur
-client = OpenAI(api_key="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")
+client = OpenAI(api_key="")
 
 # Flask uygulaması oluştur
 app = Flask(__name__)
