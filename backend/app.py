@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
+from rapidfuzz import fuzz
 
 from openai import OpenAI
 
@@ -92,16 +93,23 @@ class ChatbotAPI:
         self.logger.warning(f"Kullanıcı mesajı: {user_message}")
         relevant_keywords = ["kamiq", "scala", "fabia"]
 
-        # Check for images with high similarity to the user message
-        similar_images = []
+        # Find the most similar image name with a higher threshold
+        best_match = None
+        best_score = 0
         for image_name in self.image_storage.list_images():
             similarity = self._calculate_similarity(user_message, image_name)
-            if similarity >= 90:  # Threshold for similarity
-                similar_images.append({"name": image_name, "path": self.image_storage.get_image(image_name)})
+            if similarity > best_score and similarity >= 85:  # Adjust threshold if needed
+                best_match = {"name": image_name, "path": self.image_storage.get_image(image_name)}
+                best_score = similarity
 
+        if best_match:
+            return jsonify({
+                "response": f"Eşleşen resim bulundu: {best_match['name']}",
+                "images": [best_match]
+        })
         # If any similar images are found, include them in the response
-        if similar_images:
-            return jsonify({"response": "Eşleşen resimler bulundu.", "images": similar_images})
+        if best_match:
+            return jsonify({"response": "Eşleşen resimler bulundu.", "images": best_match})
 
         # If no relevant keyword is found and no assistant is active
         if not any(k.lower() in user_message.lower() for k in relevant_keywords):
@@ -201,13 +209,10 @@ class ChatbotAPI:
 
     def _calculate_similarity(self, input_text, image_name):
         """
-        Calculate the similarity between the user input and an image name.
-        Uses a simple character overlap method; replace with a more robust algorithm if needed.
+        Calculate similarity between the user input and an image name using a better algorithm.
+        Uses RapidFuzz for fuzzy matching.
         """
-        input_set = set(input_text.lower())
-        name_set = set(image_name.lower())
-        intersection = input_set.intersection(name_set)
-        return len(intersection) / max(len(input_set), len(name_set)) * 100
+        return fuzz.token_sort_ratio(input_text.lower(), image_name.lower())
 
     def run(self, debug=True):
         """
