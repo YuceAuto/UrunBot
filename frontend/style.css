@@ -1,73 +1,93 @@
-/* Genel stil ayarları */
 body {
-    font-family: Arial, sans-serif;
-    background-color: #f4f4f9;
-    color: #333;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-  }
-  
-  /* Konteyner */
-  .container {
-    background: #ffffff;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    width: 300px;
-    text-align: center;
-  }
-  
-  /* Başlık */
-  h1 {
-    font-size: 24px;
-    margin-bottom: 20px;
-  }
-  
-  /* Girdi alanı */
-  input[type="text"] {
-    width: calc(100% - 20px);
-    padding: 10px;
-    margin-bottom: 10px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 14px;
-  }
-  
-  /* Buton */
-  button {
-    background-color: #007bff;
-    color: white;
-    padding: 10px 15px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-  }
-  
-  button:hover {
-    background-color: #0056b3;
-  }
-  
-  /* Yanıt kutusu */
-  .response-box {
-    margin-top: 20px;
-    padding: 10px;
-    background: #e9ecef;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 14px;
-    text-align: left;
-    display: none; /* Başlangıçta gizli */
-  }
-  
-  /* Hata mesajları için stil */
-  .response-box.error {
-    background: #f8d7da;
-    color: #721c24;
-    border-color: #f5c6cb;
-  }
-  
+  font-family: Arial, sans-serif;
+  background-color: #f4f4f9;
+  color: #333;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.container {
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+  font-size: 24px;
+  margin-bottom: 20px;
+}
+
+label {
+  display: block;
+  font-size: 16px;
+  margin-bottom: 10px;
+  text-align: left;
+}
+
+input[type="text"] {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+button {
+  width: 100%;
+  background-color: #007bff;
+  color: white;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+.response-box {
+  margin-top: 20px;
+  padding: 10px;
+  background: #e9ecef;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  text-align: left;
+  display: none;
+}
+
+.image-container {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column; /* Align images vertically */
+  gap: 10px; /* Add spacing between images */
+  align-items: center;
+  width: 100%; /* Ensure it spans the container */
+}
+
+.image-container img {
+  max-width: 100%; /* Ensure the image scales within the container */
+  max-height: 300px; /* Limit the height for a uniform appearance */
+  object-fit: contain; /* Ensure the image fits without distortion */
+  border-radius: 8px; /* Add rounded corners for better aesthetics */
+  border: 1px solid #ddd; /* Add a border for separation */
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Optional: Add a shadow for emphasis */
+}
+
+
+.response-box.error {
+  background: #f8d7da;
+  color: #721c24;
+  border-color: #f5c6cb;
+}
