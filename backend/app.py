@@ -4,7 +4,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
 from openai import OpenAI
@@ -75,6 +75,10 @@ class ChatbotAPI:
             Endpoint to retrieve the last answers from all assistants.
             """
             return jsonify(self.last_answers)
+        # Add this to your route definitions in the backend
+        @self.app.route('/static/<path:path>')
+        def serve_static_file(path):
+            return send_from_directory('static', path)
 
     def _handle_ask_route(self):
         """
