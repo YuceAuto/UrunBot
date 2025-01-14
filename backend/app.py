@@ -1,18 +1,17 @@
-import os
 import time
 import logging
-from concurrent.futures import ThreadPoolExecutor
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from rapidfuzz import fuzz
-
 from openai import OpenAI
+from rapidfuzz import process as rf_process
 
 from image_paths import images  # Our pre-populated ImagePaths instance
 
-load_dotenv()
+# OpenAI API Client oluştur
+client = OpenAI()
 
 class ChatbotAPI:
     def __init__(self, openai_key=None):
@@ -222,5 +221,4 @@ class ChatbotAPI:
 
 
 if __name__ == "__main__":
-    chatbot_api = ChatbotAPI()
-    chatbot_api.run(debug=True)
+    app.run(debug=True)
