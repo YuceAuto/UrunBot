@@ -3,7 +3,7 @@ import time
 import logging
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
-from openai import OpenAI
+import openai as OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
