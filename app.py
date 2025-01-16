@@ -139,8 +139,7 @@ class ChatbotAPI:
                     print(content_value)
                     # Delegate JSON parsing and formatting to AttributeParser
                     try:
-                        content_value = self.attribute_parser.parse_nested_structure(content_value)
-                        print(content_value)
+                        content_value = self.attribute_parser.parse_data(content_value)
                     except json.JSONDecodeError:
                         self.logger.error("JSON parsing failed for response.")
 
@@ -201,7 +200,6 @@ class ChatbotAPI:
 
     def _parse_openai_response(self, message_response):
         """Extract and format the response from OpenAI."""
-        print(message_response.data)
         extracted_values = [
             block.text.value for msg in message_response.data if msg.role == "assistant"
             for block in msg.content if block.type == "text" and hasattr(block.text, "value")
