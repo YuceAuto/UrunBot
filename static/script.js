@@ -1,23 +1,22 @@
 /***************************************************
- * 1) Code fence ("```json") veya { ... } JSON çıkarma
- *    Regex'i "``` ?json" (boşluklu) durumları da kapsar
+ * 1) "value=''' ... '''" arasında geçen metni çekip al
  ***************************************************/
 function extractJsonPlain(text) {
-  // 1) Ek notasyonları temizle
-  let cleaned = text.replace(/\[TextContentBlock[\s\S]*?\)\]/g, "");
-  cleaned = cleaned.replace(/\[FileCitationAnnotation[\s\S]*?\)\]/g, "");
+  // 1) FileCitationAnnotation vb. gereksiz notasyonları silelim
+  let cleaned = text.replace(/\[FileCitationAnnotation[\s\S]*?\)\]/g, "");
   cleaned = cleaned.replace(/【\d+:\d+†.*?】/g, "");
 
-  // 2) "``` json" veya "```json" fence'i yakalamak için
-  //    /``` ?json([\s\S]*?)```/i
-  //    \s* => olası boşluk
-  const fenceRegex = /```\s*json([\s\S]*?)```/i;
+  // 2) [TextContentBlock(...)] sarmalını da silebiliriz (sunucuda büyük ölçüde temizlendi)
+  cleaned = cleaned.replace(/\[TextContentBlock[\s\S]*?\)\]/g, "");
+
+  // 3) triple backtick code fence yakala -> ```json ... ```
+  const fenceRegex = /```(?:json)?([\s\S]*?)```/i;
   const fenceMatch = fenceRegex.exec(cleaned);
   if (fenceMatch && fenceMatch[1]) {
     return fenceMatch[1].trim();
   }
 
-  // 3) code fence yoksa => { ... } arayalım
+  // 4) code fence yoksa => { ... } arayalım
   const curlyRegex = /\{[\s\S]*\}/m;
   const curlyMatch = curlyRegex.exec(cleaned);
   if (curlyMatch && curlyMatch[0]) {
@@ -32,12 +31,8 @@ function extractJsonPlain(text) {
  * 2) JSON'u tabloya dönüştüren (özyinelemeli) fonksiyon
  ***************************************************/
 function generateHTMLFromJSON(data) {
-  if (data == null) {
-    return "<i>null</i>";
-  }
-  if (typeof data !== "object") {
-    return String(data);
-  }
+  if (data == null) return "<i>null</i>";
+  if (typeof data !== "object") return String(data);
   if (Array.isArray(data)) {
     let html = `
       <table class="table table-bordered table-sm" style="background-color:#fff; color:#000;">
@@ -78,25 +73,23 @@ function generateHTMLFromJSON(data) {
 /***************************************************
  * 3) processBotMessage: JSON bul -> parse -> tablo
  ***************************************************/
-function processBotMessage(fullText) {
+function processBotMessage(fullText, uniqueId) {
   const maybeJson = extractJsonPlain(fullText);
-  console.log("maybeJson:", maybeJson); // <--- Ekledik
-
   if (maybeJson) {
     try {
       const jsonData = JSON.parse(maybeJson);
       const tableHtml = generateHTMLFromJSON(jsonData);
-      $("#botMessageContent").html(tableHtml);
+      $(`#botMessageContent-${uniqueId}`).html(tableHtml);
       return;
     } catch (err) {
       console.warn("JSON.parse hatası:", err);
-      $("#botMessageContent").text(fullText);
+      $(`#botMessageContent-${uniqueId}`).text(fullText);
       return;
     }
   }
 
-  // JSON bulamadıysak ham metin
-  $("#botMessageContent").text(fullText);
+  // JSON yoksa ham metin göster
+  $(`#botMessageContent-${uniqueId}`).text(fullText);
 }
 
 /***************************************************
@@ -126,14 +119,17 @@ $(document).ready(function () {
     $("#messageFormeight").append(userHtml);
     inputField.val("");
 
-    // Bot yanıt balonu
+    // BOT yanıtı için benzersiz ID (her mesaj ayrı)
+    const uniqueId = Date.now();  // Basit yöntem
+
+    // Bot yanıt balonu (her seferinde yeni HTML oluşturuyoruz!)
     const botHtml = `
       <div class="d-flex justify-content-start mb-4">
-        <img src="{{ url_for('static', filename='images/fotograf.png') }}"
+        <img src="static/images/fotograf.png"
              class="rounded-circle user_img_msg"
              alt="bot image">
-        <div class="msg_cotainer" id="botMessageContainer">
-          <span id="botMessageContent"></span>
+        <div class="msg_cotainer">
+          <span id="botMessageContent-${uniqueId}"></span>
         </div>
         <span class="msg_time">${currentTime}</span>
       </div>
@@ -164,17 +160,16 @@ $(document).ready(function () {
       function readChunk() {
         return reader.read().then(({ done, value }) => {
           if (done) {
-            // Tüm chunk bitti
-            console.log("Final botMessage:", botMessage); // <--- Önemli
-            processBotMessage(botMessage);
+            // Tüm chunk bitti -> final parse
+            processBotMessage(botMessage, uniqueId);
             return;
           }
 
           const chunkText = decoder.decode(value, { stream: true });
           botMessage += chunkText;
 
-          // Anlık metin göster
-          $("#botMessageContent").text(botMessage);
+          // Anlık metni ID'si unique olan span'e yaz
+          $(`#botMessageContent-${uniqueId}`).text(botMessage);
           $("#messageFormeight").scrollTop($("#messageFormeight")[0].scrollHeight);
 
           return readChunk();
@@ -184,7 +179,12 @@ $(document).ready(function () {
     })
     .catch(err => {
       console.error("Hata:", err);
-      $("#botMessageContent").text("Bir hata oluştu: " + err.message);
+      $(`#botMessageContent-${uniqueId}`).text("Bir hata oluştu: " + err.message);
     });
   });
+
+  // Örnek: 9. dakikada notification göster
+  setTimeout(() => {
+    document.getElementById('notificationBar').style.display = 'block';
+  }, 9 * 60 * 1000);
 });

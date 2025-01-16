@@ -1,172 +1,169 @@
-import os
 import time
-import logging
-
+import re
 from flask import Flask, request, jsonify, render_template
-from dotenv import load_dotenv
 from flask_cors import CORS
+from openai import OpenAI
+import logging
+from dotenv import load_dotenv
 import openai
-
+import os
+# .env dosyasından ortam değişkenlerini yükleyelim
 load_dotenv()
 
-class ChatbotConfig:
-    def __init__(self, static_folder='static', template_folder='templates'):
-        """
-        Initializes the ChatbotConfig class, setting up Flask, logging, OpenAI client,
-        and assistant configurations.
-        """
-        # Initialize Flask app
-        self.app = Flask(
-            __name__,
-            static_folder=static_folder,
-            template_folder=template_folder
-        )
-        CORS(self.app)
 
-        # Initialize logging
-        self.logger = self._setup_logger()
+app = Flask(__name__,
+            static_folder='static',
+            template_folder='templates')
+CORS(app)
 
-        # OpenAI client setup
-        openai.api_key = os.getenv("OPENAI_API_KEY")
-        self.client = openai
+# Loglama
+logger = logging.getLogger("ChatbotAPI")
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
-        # Assistant ID and keywords configuration
-        self.ASSISTANT_CONFIG = {
-            "asst_1qGG7y8w6QcupPETaYQRdGsI": ["Kamiq"],
-            "asst_yeDl2aiHy0uoGGjHRmr2dlYB": ["Fabia"],
-            "asst_njSG1NVgg4axJFmvVYAIXrpM": ["Scala"],
-        }
-        self.user_states = {}
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-        # Define routes
-        self._define_routes()
+# openai nesnesini client olarak kullanmak istiyorsanız:
+client = openai
 
-    def _setup_logger(self):
-        """
-        Sets up a logger for the chatbot application.
-        """
-        logger = logging.getLogger("ChatbotAPI")
-        handler = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
-        return logger
+# Asistan ID / Anahtar Kelime
+ASSISTANT_CONFIG = {
+    "asst_1qGG7y8w6QcupPETaYQRdGsI": ["Kamiq"],
+    "asst_yeDl2aiHy0uoGGjHRmr2dlYB": ["Fabia"],
+    "asst_njSG1NVgg4axJFmvVYAIXrpM": ["Scala"],
+}
+user_states = {}
 
-    def _define_routes(self):
-        """
-        Define Flask routes.
-        """
-        @self.app.route("/", methods=["GET"])
-        def home():
-            return self._render_home()
+# -------------------------------------------------
+#  [TextContentBlock(...)] -> triple backtick JSON
+#  Sadece triple backtick içindeki metni koruyoruz
+# -------------------------------------------------
+def strip_textcontentblock_keep_value(original_text):
+    """
+    [TextContentBlock(text=Text(...), value='''json ... ''', type='text')]
+    gibi bloklardan, sadece triple backtick (''' ... ''') içindeki
+    veriyi saklayıp, geri kalan sarmalayıcı ifadeyi atar.
+    """
+    pattern = r"""
+    \[TextContentBlock         # Blokların başlangıcı
+    \(                         # Parantez
+    .*?                        # type, text, vs. rastgele
+    value=['\"`]{3}            # triple tırnak veya backtick
+    ([\s\S]*?)                 # <-- Burası asıl yakalamak istediğimiz "value" içeriği
+    ['\"`]{3}                  # triple tırnak/backtick kapanışı
+    .*?                        # Kalan kısımları (annotations vs.)
+    \)                         # Blok parantez sonu
+    \]                         # Köşeli parantez kapanışı
+    """
 
-        @self.app.route("/ask", methods=["POST"])
-        def ask():
-            return self._handle_ask_route()
+    compiled = re.compile(pattern, flags=re.VERBOSE | re.DOTALL)
 
-        @self.app.route("/feedback", methods=["POST"])
-        def feedback():
-            return self._handle_feedback_route()
+    def replacer(match):
+        # Yakalanan group(1) -> triple backtick içi
+        inner_value = match.group(1)
+        # Bunu tekrar code fence'e sararak geri döndürüyoruz
+        return f"```json\n{inner_value}\n```"
 
-    def _render_home(self):
-        """
-        Render the home page template.
-        """
-        return render_template("index.html")
+    return compiled.sub(replacer, original_text)
 
-    def _handle_ask_route(self):
-        """
-        Handle user questions via POST requests.
-        """
-        try:
-            data = request.get_json()
-            if not data:
-                return jsonify({"error": "Invalid JSON format."}), 400
+@app.route("/", methods=["GET"])
+def home():
+    return render_template("index.html")
 
-            user_message = data.get("question", "")
-            user_id = data.get("user_id", "default_user")
+@app.route("/ask", methods=["POST"])
+def ask():
+    """
+    Streaming (chunk) yanıt döndüren endpoint.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Geçersiz JSON formatı."}), 400
+    except Exception as e:
+        logger.error(f"JSON ayrıştırma hatası: {str(e)}")
+        return jsonify({"error": "Geçersiz JSON formatı."}), 400
 
-            if not user_message:
-                return jsonify({"response": "Please provide a question."})
+    user_message = data.get("question", "")
+    user_id = data.get("user_id", "default_user")
 
-            self.logger.info(f"User ({user_id}) message: {user_message}")
+    if not user_message:
+        return jsonify({"response": "Lütfen bir soru girin."})
 
-            response_generator = self._generate_response(user_message, user_id)
-            return self.app.response_class(response_generator, mimetype="text/plain")
+    def generate_response():
+        logger.info(f"Kullanıcı ({user_id}) mesajı: {user_message}")
+        assistant_id = user_states.get(user_id)
 
-        except Exception as e:
-            self.logger.error(f"Error: {str(e)}")
-            return jsonify({"error": "An error occurred."}), 500
-
-    def _generate_response(self, user_message, user_id):
-        """
-        Generate a response for the user.
-        """
-        assistant_id = self.user_states.get(user_id)
-
-        # Match user message with assistant keywords
-        for aid, keywords in self.ASSISTANT_CONFIG.items():
+        # Mesaja göre asistan seç
+        for aid, keywords in ASSISTANT_CONFIG.items():
             if any(keyword.lower() in user_message.lower() for keyword in keywords):
                 assistant_id = aid
-                self.user_states[user_id] = assistant_id
+                user_states[user_id] = assistant_id
                 break
 
         if not assistant_id:
-            yield "No suitable assistant found.\n".encode("utf-8")
+            yield "Uygun bir asistan bulunamadı.\n".encode("utf-8")
             return
 
         try:
-            thread = self.client.beta.threads.create(
+            # ChatGPT thread oluştur
+            thread = client.beta.threads.create(
                 messages=[{"role": "user", "content": user_message}]
             )
-            run = self.client.beta.threads.runs.create(thread_id=thread.id, assistant_id=assistant_id)
+            run = client.beta.threads.runs.create(thread_id=thread.id, assistant_id=assistant_id)
 
             start_time = time.time()
             timeout = 30
-            yield "Preparing a response\n".encode("utf-8")
+
+            # "Yanıt hazırlanıyor..." KALSIN
+            yield "Yanıt hazırlanıyor...\n".encode("utf-8")
 
             while time.time() - start_time < timeout:
-                run = self.client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
+                run = client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
                 if run.status == "completed":
-                    message_response = self.client.beta.threads.messages.list(thread_id=thread.id)
+                    # Yanıtı al
+                    message_response = client.beta.threads.messages.list(thread_id=thread.id)
                     for msg in message_response.data:
                         if msg.role == "assistant":
                             content = str(msg.content)
-                            # Simulate typing effect
-                            for char in content:
-                                yield char.encode("utf-8")
-                                time.sleep(0.01)
+
+                            # Yalnızca triple backtick verisini koruyacak şekilde
+                            content = strip_textcontentblock_keep_value(content)
+
+                            # Aşağıda isterseniz FileCitationAnnotation vb. ek notasyonları da temizleyebilirsiniz
+                            # content = re.sub(r"\[FileCitationAnnotation[\s\S]*?\)", "", content)
+
+                            # Tek chunk olarak gönderelim (isterseniz harf harf de yapabilirsiniz)
+                            yield content.encode("utf-8")
                     return
+
                 elif run.status == "failed":
-                    yield "Response generation failed.\n".encode("utf-8")
+                    yield "Yanıt oluşturulamadı.\n".encode("utf-8")
                     return
-                yield ".".encode("utf-8")
+
+                # Nokta (.) animasyonunu kaldırmak için bu satırı yorumluyoruz:
+                # yield ".".encode("utf-8")
                 time.sleep(0.5)
 
-            yield "Response timed out.\n".encode("utf-8")
+            yield "Yanıt alma zaman aşımına uğradı.\n".encode("utf-8")
+
         except Exception as e:
-            self.logger.error(f"Error generating response: {str(e)}")
-            yield f"An error occurred: {str(e)}\n".encode("utf-8")
+            logger.error(f"Yanıt oluşturma hatası: {str(e)}")
+            yield f"Bir hata oluştu: {str(e)}\n".encode("utf-8")
 
-    def _handle_feedback_route(self):
-            """
-            Handle user feedback via POST requests.
-            """
-            try:
-                data = request.get_json()
-                self.logger.info(f"Feedback received: {data}")
-                return jsonify({"message": "Thank you for your feedback!"})
-            except Exception as e:
-                self.logger.error(f"Feedback error: {str(e)}")
-                return jsonify({"error": "An error occurred."}), 500
+    return app.response_class(generate_response(), mimetype="text/plain")
 
-    def run(self, debug=True):
-        """
-        Run the Flask application.
-        """
-        self.app.run(debug=debug)
+@app.route("/feedback", methods=["POST"])
+def feedback():
+    try:
+        data = request.get_json()
+        logger.info(f"Geri bildirim alındı: {data}")
+        return jsonify({"message": "Geri bildiriminiz için teşekkür ederiz!"})
+    except Exception as e:
+        logger.error(f"Geri bildirim hatası: {str(e)}")
+        return jsonify({"error": "Bir hata oluştu."}), 500
 
 if __name__ == "__main__":
-    config = ChatbotConfig()
-    config.run(debug=True)
+    app.run(debug=True)

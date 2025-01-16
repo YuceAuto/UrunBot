@@ -15,45 +15,7 @@
     <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css')}}" />
 
     <style>
-        /* Yükseklik ayarları vb. */
-        .container-fluid, .row.justify-content-center.h-100 {
-            height: 100vh;            
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        .chat {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            max-width: 95%;
-            min-width: 760px;
-            height: 100%;
-        }
-        .card {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-        }
-        .card-body {
-            flex: 1;
-            overflow-y: auto;
-        }
-        .card-footer {
-            display: flex;
-        }
-        .msg_card_body {
-            height: calc(100% - 150px);
-            overflow-y: auto;
-        }
-        .card-header.msg_head {
-            display: flex;
-            align-items: center;
-            background-color: #000;
-            color: #FFFFFF;
-        }
+        /* Ek ufak stiller */
         .notification-text {
             background-color: #dff0d8;
             color: #3c763d;
@@ -76,10 +38,10 @@
                     <div class="card-header msg_head">
                         <div class="d-flex bd-highlight">
                             <div class="img_cont">
-                                <!-- Fotoğraf -->
+                                <!-- Bot Fotoğrafı -->
                                 <img src="{{ url_for('static', filename='images/fotograf.png') }}"
                                      class="rounded-circle user_img"
-                                     alt="user image">
+                                     alt="bot image">
                                 <span class="online_icon"></span>
                             </div>
                             <div class="user_info">
@@ -92,7 +54,7 @@
                         <p>Oturumunuz 10 dakika sonra sona erecektir.</p>
                     </div>
                     <div id="messageFormeight" class="card-body msg_card_body">
-                        <!-- Mesajlar buraya gelecek -->
+                        <!-- Mesajlar buraya eklenecek -->
                     </div>
                     <div class="card-footer">
                         <form id="messageArea" class="input-group">
