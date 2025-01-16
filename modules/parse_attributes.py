@@ -1,4 +1,5 @@
 import logging
+from modules.image_paths import ImagePaths
 
 class AttributeParser:
     """
@@ -54,18 +55,59 @@ class AttributeParser:
         Custom parser for handling the specific message structure provided.
 
         :param messages: List of Message objects with content to process.
-        :return: A formatted dictionary with attributes and related images.
+        :return: A dictionary with either parsed data or the original message for direct response.
         """
         formatted_response = {}
 
-        for message in messages:
-            if message.role == "assistant":
-                for content_block in message.content:
-                    if content_block.type == "text":
-                        raw_text = content_block.text.value
-                        formatted_response.update(self._parse_message_text(raw_text))
+        try:
+            for message in messages:
+                if message.role == "assistant":
+                    for content_block in message.content:
+                        if content_block.type == "text":
+                            raw_text = content_block.text.value
+
+                            # If the content matches the desired direct response format
+                            if self._is_direct_response(raw_text):
+                                formatted_response["response_html"] = self._format_as_html(raw_text)
+                                return formatted_response
+
+                            # Parse attributes or nested data
+                            parsed_response = self._parse_message_text(raw_text)
+                            if parsed_response:
+                                formatted_response.update(parsed_response)
+        except Exception as e:
+            logging.error(f"Error parsing custom message format: {str(e)}")
+            formatted_response["response"] = "An error occurred while parsing the response."
 
         return formatted_response
+
+    def _format_as_html(self, text):
+        """
+        Converts the provided text into a simple HTML format for display on the frontend.
+
+        :param text: Raw text to format as HTML.
+        :return: HTML-formatted string.
+        """
+        lines = text.split("\n")
+        formatted_lines = []
+
+        for line in lines:
+            if line.strip().startswith("- "):
+                formatted_lines.append(f"<li>{line.strip('- ').strip()}</li>")
+            else:
+                formatted_lines.append(f"<p>{line.strip()}</p>")
+
+        return "\n".join(formatted_lines)
+
+    def _is_direct_response(self, text):
+        """
+        Checks if the text matches a direct response with a bullet-pointed list format.
+
+        :param text: Text content of the message.
+        :return: Boolean indicating whether the text is a direct bullet-pointed response.
+        """
+        return "mevcut renk seçenekleri şunlardır" in text.lower() and any(
+            line.strip().startswith("- ") for line in text.split("\n"))
 
     def _parse_message_text(self, text):
         """
@@ -101,23 +143,6 @@ class AttributeParser:
         items = [line.strip("- ").strip() for line in lines if line.startswith("- ")]
         return items
 
-    def parse_data(self, data):
-        """
-        Determines the appropriate parsing method based on the structure of the JSON data.
-
-        :param data: JSON data containing attributes and details.
-        :return: Parsed data in the required format.
-        """
-        if isinstance(data, dict) and any(isinstance(value, list) for value in data.values()):
-            # If the data is a dictionary with lists of objects, use parse_table_data
-            return self.parse_table_data(data)
-        elif isinstance(data, dict):
-            # If the data is a nested dictionary, use parse_nested_structure
-            return self.parse_nested_structure(data)
-        else:
-            raise ValueError("Unsupported data structure")
-
-
     def parse_table_data(self, json_data):
         """
         Parses the provided JSON to prepare table data including images.
@@ -136,14 +161,12 @@ class AttributeParser:
 
                         # Find matching images for the first string attribute
                         for attr, value in item.items():
-                            try:
-                                if isinstance(value, str):
-                                    matching_images = self.image_paths.find_similar_images(value)
-                                    for name, path in matching_images:
-                                        row["Resim"].append({"name": name, "path": path})
-                                    break
-                            except Exception as e:
-                                print(e)
+                            if isinstance(value, str):
+                                matching_images = self.image_paths.find_similar_images(value)
+                                for name, path in matching_images:
+                                    row["Resim"].append({"name": name, "path": path})
+                                break
+
                         table_data.append(row)
 
         return table_data
@@ -200,3 +223,24 @@ class AttributeParser:
         :return: Dictionary containing the current configuration.
         """
         return self.config
+
+
+if __name__ == "__main__":
+    test_json = {
+    "jantlar": [
+        {"boyut": "6.0J x 16\"", "lastik": "205/60 R16", "standart": "Elite için standart"}
+    ],
+    "opsiyonel_jantlar": [
+        {"isim": "Montado Aero", "boyut": "6JX16\"", "lastik": "205/60/16", "fiyat": "9,259 TL"}
+    ]
+    }
+
+    test_messages = "Renk Seçenekleri:\n- Kırmızı\n- Siyah"
+
+    parser = AttributeParser(image_paths=ImagePaths())
+
+    # Test JSON parsing
+    print(parser.parse_data(test_json))
+
+    # Test Message parsing
+    print(parser.parse_data(test_messages))

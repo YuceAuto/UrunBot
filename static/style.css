@@ -1,13 +1,12 @@
-/* Body / HTML tam ekran + gradyan arka plan */
+/* Fullscreen Gradient Background */
 body, html {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: #6F797A; /* Sol arka plan rengi */
-  background: -webkit-linear-gradient(to right, #0E3A2F, #78FAAE);
   background: linear-gradient(to right, #0E3A2F, #78FAAE);
 }
 
+/* Chat Container */
 .container-fluid, .row.justify-content-center.h-100 {
   height: 100vh;
   display: flex;
@@ -28,42 +27,97 @@ body, html {
   display: flex;
   flex-direction: column;
   height: 100%;
-  border-radius: 15px !important;
-  background-color: #000000 !important; /* Sohbet penceresi arka plan rengi */
+  border-radius: 15px;
+  background-color: #000;
+  color: #fff;
 }
 .card-header.msg_head {
   display: flex;
   align-items: center;
   background-color: #000;
   color: #FFFFFF;
-  border-radius: 15px 15px 0 0 !important;
-  border-bottom: 0 !important;
+  border-radius: 15px 15px 0 0;
 }
 .card-footer {
-  border-radius: 0 0 15px 15px !important;
-  border-top: 0 !important;
+  border-radius: 0 0 15px 15px;
   display: flex;
 }
 
+/* Chat Messages */
 .msg_card_body {
   flex: 1;
   overflow-y: auto;
+  padding: 10px;
+}
+.msg_cotainer {
+  margin: 10px 0;
+  border-radius: 25px;
+  background-color: rgb(82, 172, 255);
+  padding: 10px;
+  color: #000;
+}
+.msg_cotainer_send {
+  margin: 10px 0;
+  border-radius: 25px;
+  background-color: #58cc71;
+  padding: 10px;
+  color: #000;
 }
 
+/* Timestamps */
+.msg_time, .msg_time_send {
+  position: absolute;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+.msg_time {
+  left: 10px;
+  bottom: -15px;
+}
+.msg_time_send {
+  right: 10px;
+  bottom: -15px;
+}
+
+/* Input Field */
+.type_msg {
+  background-color: #394748;
+  border: none;
+  color: #78FAAE;
+  height: 60px;
+  padding-right: 10px;
+  border-radius: 10px;
+}
+.type_msg:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Send Button */
+.send_btn {
+  background-color: #0E3A2F;
+  border: 2px solid #0E3A2F;
+  color: white;
+  cursor: pointer;
+  border-radius: 10px;
+  width: 60px;
+  height: 60px;
+}
+.send_btn:active {
+  border: 2px solid black;
+}
+
+/* Images */
 .user_img {
-  height: 70px;
-  width: 70px;
-  border: 1.5px solid #f5f6fa;
+  height: 50px;
+  width: 50px;
+  border-radius: 50%;
+  border: 2px solid white;
 }
 .user_img_msg {
   height: 40px;
   width: 40px;
-  border: 1.5px solid #f5f6fa;
-}
-.img_cont {
-  position: relative;
-  height: 70px;
-  width: 70px;
+  border-radius: 50%;
 }
 .online_icon {
   position: absolute;
@@ -73,85 +127,16 @@ body, html {
   border-radius: 50%;
   bottom: 0.2em;
   right: 0.4em;
-  border: 1.5px solid white;
+  border: 2px solid white;
 }
 
-.user_info {
-  margin-top: auto;
-  margin-bottom: auto;
-  margin-left: 15px;
-}
-.user_info span {
-  font-size: 20px;
-  color: white;
-}
-.user_info p {
-  font-size: 10px;
-  color: rgba(255,255,255,0.6);
-}
-
-.type_msg {
-  background-color: #394748 !important;
-  border: 0 !important;
-  color: #78FAAE !important;
-  height: 60px !important;
-  overflow-y: auto;
-  padding-right: 0;
-}
-.type_msg:focus {
-  box-shadow: none !important;
-  outline: 0px !important;
-}
-
-.send_btn {
-  background-color: #0E3A2F;
-  border: 2px solid #0E3A2F;
-  color: white;
-  cursor: pointer;
-  width: 60px;
-  height: 60px;
-  border-radius: 15px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: border 0.3s;
-}
-.send_btn:active {
-  border: 2px solid black;
-}
-
-.msg_cotainer {
-  margin-top: auto;
-  margin-bottom: auto;
-  margin-left: 10px;
-  border-radius: 25px;
-  background-color: rgb(82, 172, 255);
-  padding: 10px;
-  position: relative;
-  color: #000;
-}
-.msg_cotainer_send {
-  margin-top: auto;
-  margin-bottom: auto;
-  margin-right: 10px;
-  border-radius: 25px;
-  background-color: #58cc71;
-  padding: 10px;
-  position: relative;
-  color: #000;
-}
-
-.msg_time {
-  position: absolute;
-  left: 0;
-  bottom: -15px;
-  color: rgba(255,255,255,0.5);
-  font-size: 10px;
-}
-.msg_time_send {
-  position: absolute;
-  right: 0;
-  bottom: -15px;
-  color: rgba(255,255,255,0.5);
-  font-size: 10px;
+/* Notification Bar */
+.notification-text {
+  background-color: #dff0d8;
+  color: #3c763d;
+  text-align: center;
+  font-size: 14px;
+  padding: 5px;
+  margin: 0;
+  display: none;
 }

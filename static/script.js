@@ -1,38 +1,37 @@
 /***************************************************
- * 1) "value=''' ... '''" arasında geçen metni çekip al
+ * 1) Extract JSON or plain text
  ***************************************************/
 function extractJsonPlain(text) {
-  // 1) FileCitationAnnotation vb. gereksiz notasyonları silelim
-  let cleaned = text.replace(/\[FileCitationAnnotation[\s\S]*?\)\]/g, "");
-  cleaned = cleaned.replace(/【\d+:\d+†.*?】/g, "");
+  // Remove unnecessary annotations
+  let cleaned = text.replace(/\[FileCitationAnnotation[\s\S]*?\)\]/g, "")
+                    .replace(/【\d+:\d+†.*?】/g, "")
+                    .replace(/\[TextContentBlock[\s\S]*?\)\]/g, "");
 
-  // 2) [TextContentBlock(...)] sarmalını da silebiliriz (sunucuda büyük ölçüde temizlendi)
-  cleaned = cleaned.replace(/\[TextContentBlock[\s\S]*?\)\]/g, "");
-
-  // 3) triple backtick code fence yakala -> ```json ... ```
+  // Match and extract JSON using code fences
   const fenceRegex = /```(?:json)?([\s\S]*?)```/i;
   const fenceMatch = fenceRegex.exec(cleaned);
   if (fenceMatch && fenceMatch[1]) {
     return fenceMatch[1].trim();
   }
 
-  // 4) code fence yoksa => { ... } arayalım
+  // If no code fences, search for JSON-like structure
   const curlyRegex = /\{[\s\S]*\}/m;
   const curlyMatch = curlyRegex.exec(cleaned);
   if (curlyMatch && curlyMatch[0]) {
     return curlyMatch[0].trim();
   }
 
-  // JSON bulunamadı
+  // No valid JSON found
   return null;
 }
 
 /***************************************************
- * 2) JSON'u tabloya dönüştüren (özyinelemeli) fonksiyon
+ * 2) Generate HTML from JSON (recursively)
  ***************************************************/
 function generateHTMLFromJSON(data) {
   if (data == null) return "<i>null</i>";
   if (typeof data !== "object") return String(data);
+  
   if (Array.isArray(data)) {
     let html = `
       <table class="table table-bordered table-sm" style="background-color:#fff; color:#000;">
@@ -53,7 +52,7 @@ function generateHTMLFromJSON(data) {
     return html;
   }
 
-  // object
+  // For objects, create a key-value table
   let html = `
     <table class="table table-bordered table-sm" style="background-color:#fff; color:#000;">
       <tbody>
@@ -71,7 +70,7 @@ function generateHTMLFromJSON(data) {
 }
 
 /***************************************************
- * 3) processBotMessage: JSON bul -> parse -> tablo
+ * 3) Process bot messages for JSON or text
  ***************************************************/
 function processBotMessage(fullText, uniqueId) {
   let parsedResponse;
@@ -81,60 +80,21 @@ function processBotMessage(fullText, uniqueId) {
       parsedResponse = JSON.parse(fullText);
   } catch (err) {
       console.error("JSON.parse error:", err);
-      console.log("Received text:", fullText); // Log the full response for debugging
       $(`#botMessageContent-${uniqueId}`).text("Response is not in JSON format: " + fullText);
       return;
   }
 
-  // Extract response text and images
+  // Extract response text
   const botMessageContent = parsedResponse.response || "No response available.";
-  const images = parsedResponse.images || [];
 
-  if (botMessageContent === "Preparing response...") {
-      // Display the "Preparing response..." message
-      $(`#botMessageContent-${uniqueId}`).text(botMessageContent);
-
-      // Display images if any during preparation
-      if (images.length > 0) {
-          let imageHtml = `<div class="image-container" style="margin-top: 10px;">`;
-          images.forEach(image => {
-              imageHtml += `
-                  <div style="display: inline-block; margin: 5px;">
-                      <img src="${image.url}" alt="${image.name}" 
-                           style="max-width: 100px; max-height: 100px; border: 1px solid #ddd; border-radius: 4px; padding: 5px;" />
-                      <p style="text-align: center; font-size: 12px; color: #555;">${image.name}</p>
-                  </div>
-              `;
-          });
-          imageHtml += `</div>`;
-          $(`#botMessageContent-${uniqueId}`).append(imageHtml);
-      }
-
-      return;
-  }
-
-  // Display the final response with images
-  let htmlContent = `<p>${botMessageContent.replace(/\n/g, "<br>")}</p>`; // Replace `\n` with `<br>` for proper formatting
-  if (images.length > 0) {
-      htmlContent += `<div class="image-container" style="margin-top: 10px;">`;
-      images.forEach(image => {
-          htmlContent += `
-              <div style="display: inline-block; margin: 5px;">
-                  <img src="${image.url}" alt="${image.name}" 
-                       style="max-width: 100px; max-height: 100px; border: 1px solid #ddd; border-radius: 4px; padding: 5px;" />
-                  <p style="text-align: center; font-size: 12px; color: #555;">${image.name}</p>
-              </div>
-          `;
-      });
-      htmlContent += `</div>`;
-  }
-
+  // Display the response on the frontend
+  let htmlContent = `<p>${botMessageContent.replace(/\n/g, "<br>")}</p>`;
   $(`#botMessageContent-${uniqueId}`).html(htmlContent);
 }
 
 
 /***************************************************
- * 4) readChunk() + form submit
+ * 4) Handle user input and server communication
  ***************************************************/
 $(document).ready(function () {
   $("#messageArea").on("submit", function (e) {
@@ -144,7 +104,7 @@ $(document).ready(function () {
     let rawText = inputField.val().trim();
     if (!rawText) return;
 
-    // Kullanıcı (yeşil balon)
+    // User message bubble
     const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const userHtml = `
       <div class="d-flex justify-content-end mb-4">
@@ -160,10 +120,8 @@ $(document).ready(function () {
     $("#messageFormeight").append(userHtml);
     inputField.val("");
 
-    // BOT yanıtı için benzersiz ID (her mesaj ayrı)
-    const uniqueId = Date.now();  // Basit yöntem
-
-    // Bot yanıt balonu (her seferinde yeni HTML oluşturuyoruz!)
+    // Bot message bubble
+    const uniqueId = Date.now();
     const botHtml = `
       <div class="d-flex justify-content-start mb-4">
         <img src="static/images/fotograf.png"
@@ -178,7 +136,7 @@ $(document).ready(function () {
     $("#messageFormeight").append(botHtml);
     $("#messageFormeight").scrollTop($("#messageFormeight")[0].scrollHeight);
 
-    // /ask endpoint -> fetch
+    // Send request to server
     fetch("/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -189,9 +147,9 @@ $(document).ready(function () {
     })
     .then(response => {
       if (!response.ok) {
-        throw new Error("Sunucu hatası: " + response.status);
+        throw new Error("Server error: " + response.status);
       }
-      return response.body; // ReadableStream
+      return response.body;
     })
     .then(stream => {
       const reader = stream.getReader();
@@ -201,15 +159,10 @@ $(document).ready(function () {
       function readChunk() {
         return reader.read().then(({ done, value }) => {
           if (done) {
-            // Tüm chunk bitti -> final parse
             processBotMessage(botMessage, uniqueId);
             return;
           }
-
-          const chunkText = decoder.decode(value, { stream: true });
-          botMessage += chunkText;
-
-          // Anlık metni ID'si unique olan span'e yaz
+          botMessage += decoder.decode(value, { stream: true });
           $(`#botMessageContent-${uniqueId}`).text(botMessage);
           $("#messageFormeight").scrollTop($("#messageFormeight")[0].scrollHeight);
 
@@ -219,12 +172,12 @@ $(document).ready(function () {
       return readChunk();
     })
     .catch(err => {
-      console.error("Hata:", err);
-      $(`#botMessageContent-${uniqueId}`).text("Bir hata oluştu: " + err.message);
+      console.error("Error:", err);
+      $(`#botMessageContent-${uniqueId}`).text("An error occurred: " + err.message);
     });
   });
 
-  // Örnek: 9. dakikada notification göster
+  // Notification for session expiry
   setTimeout(() => {
     document.getElementById('notificationBar').style.display = 'block';
   }, 9 * 60 * 1000);

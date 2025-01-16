@@ -98,14 +98,7 @@ class ChatbotAPI:
         Generates a response by selecting an assistant ID and parsing OpenAI's response.
         """
         self.logger.info(f"Kullanıcı ({user_id}) mesajı: {user_message}")
-        assistant_id = self.user_states.get(user_id)
-
-        # Select assistant based on the user message
-        for aid, keywords in self.ASSISTANT_CONFIG.items():
-            if any(keyword.lower() in user_message.lower() for keyword in keywords):
-                assistant_id = aid
-                self.user_states[user_id] = assistant_id
-                break
+        assistant_id = self._select_assistant(user_message, user_id)
 
         if not assistant_id:
             yield json.dumps({"response": "No suitable assistant found."})
@@ -136,21 +129,14 @@ class ChatbotAPI:
                         thread_id=thread.id
                     )
                     content_value = self._parse_openai_response(message_response)
-                    print(content_value)
-                    # Delegate JSON parsing and formatting to AttributeParser
-                    try:
-                        content_value = self.attribute_parser.parse_data(content_value)
-                    except json.JSONDecodeError:
-                        self.logger.error("JSON parsing failed for response.")
 
+                    # Send the formatted response back to the frontend
                     yield json.dumps({"response": content_value})
                     return
 
                 elif run.status == "failed":
-                    self.logger.error("OpenAI run failed to generate a response.")
                     yield json.dumps({"response": "Response generation failed."})
                     return
-
 
                 time.sleep(0.5)
 
@@ -158,7 +144,6 @@ class ChatbotAPI:
 
         except Exception as e:
             self.logger.error(f"Error generating response: {str(e)}")
-            
             yield json.dumps({"response": f"An error occurred: {str(e)}"})
 
 
