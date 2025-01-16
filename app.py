@@ -10,6 +10,37 @@ import openai
 
 load_dotenv()
 
+def transform_text_to_markdown(input_text):
+    """
+    Gelen metindeki özel işaretleri ve kalıpları tespit ederek
+    Markdown formatına dönüştürür.
+    Örnek:
+    - '- **Güvenlik:**' => '### Güvenlik'
+    - '- metin' => '- metin' (madde imi)
+    """
+    lines = input_text.split('\n')
+    transformed_lines = []
+
+    for line in lines:
+        stripped_line = line.strip()
+
+        # Özel kalıp 1: '- **...:**' => '### ...'
+        if stripped_line.startswith('- **') and stripped_line.endswith(':**'):
+            # Örneğin: '- **Güvenlik:**' => 'Güvenlik'
+            heading_content = stripped_line.replace('- **', '').replace(':**', '').strip()
+            transformed_lines.append(f'### {heading_content}')
+
+        # Özel kalıp 2: '- ' ile başlayan satırlar => normal bullet
+        elif stripped_line.startswith('- '):
+            bullet_content = stripped_line[2:]
+            transformed_lines.append(f'- {bullet_content}')
+
+        else:
+            transformed_lines.append(stripped_line)
+
+    return '\n'.join(transformed_lines)
+
+
 def extract_markdown_tables_from_text(text):
     """
     Verilen text içinde '|' içeren satırları bularak potansiyel Markdown tablo satırlarını döndürür.
@@ -168,27 +199,26 @@ class ChatbotAPI:
                             # Orijinal içerik
                             content = str(msg.content)
 
-                            # İSTERSENİZ SUNUCU TARAFINDA DA KÖŞELİ PARANTEZLERİ TEMİZLEYEBİLİRSİNİZ:
-                            # content = re.sub(r'【.*?】', '', content)
+                            # 1) Metni Markdown'a dönüştür
+                            content = transform_text_to_markdown(content)
 
-                            # Tabloları bulup HTML'e dönüştürüp eklemek isterseniz:
+                            # 2) (isteğe bağlı) tabloları bulup HTML'e dönüştür
                             pattern = r'value="([^"]+)"'
                             match = re.search(pattern, content)
                             if match:
-                                extracted_text = match.group(1)
-                                extracted_text = extracted_text.replace("\\n", "\n")
+                                extracted_text = match.group(1).replace("\\n", "\n")
                                 tables = extract_markdown_tables_from_text(extracted_text)
 
                                 if tables:
                                     self.logger.info(f"Bulunan tablolar: {tables}")
                                     for i, tbl in enumerate(tables, 1):
                                         html_table = markdown_table_to_html(tbl)
-                                        # Tabloyu HTML olarak chunk halinde gönderebiliriz:
+                                        # Tabloyu HTML olarak chunk halinde gönderelim:
                                         yield f"\n--- Tablo {i} (HTML) ---\n".encode("utf-8")
                                         yield html_table.encode("utf-8")
                                         yield b"\n"
 
-                            # Son olarak orijinal cevabı da gönder
+                            # 3) Dönüştürülmüş içeriği gönder
                             yield content.encode("utf-8")
                     return
 
