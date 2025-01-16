@@ -155,3 +155,9 @@ body, html {
   color: rgba(255,255,255,0.5);
   font-size: 10px;
 }
+
+/* TABLO MAVI ARKA PLAN (baloncuk rengi) */
+.my-blue-table {
+  background-color: rgb(82, 172, 255) !important;
+  color: #000 !important;
+}

@@ -29,27 +29,27 @@ function markdownTableToHTML(mdTable) {
     return `<p>${mdTable}</p>`;
   }
 
-  // 1. satır = başlık
   const headerLine = lines[0];
   const headerCells = headerLine.split("|").map(cell => cell.trim()).filter(Boolean);
-
-  // 2. satır = ayraç, geri kalan satırlar = veri
   const bodyLines = lines.slice(2);
 
-  let html = `<table class="table table-bordered table-sm" style="background-color:#fff; color:#000;">\n<thead><tr>`;
+  // TABLOYU MAVİ YAPMAK İÇİN .my-blue-table
+  let html = `<table class="table table-bordered table-sm my-blue-table">\n<thead><tr>`;
+
   headerCells.forEach(cell => {
     html += `<th>${cell}</th>`;
   });
   html += `</tr></thead>\n<tbody>\n`;
 
   bodyLines.forEach(line => {
-    if (!line.trim()) return; // Boş satırı atla
-    const cols = line.split("|").map(col => col.trim()).filter(Boolean);
+    const row = line.trim();
+    if (!row) return;
+    const cols = row.split("|").map(c => c.trim()).filter(Boolean);
     if (cols.length === 0) return;
 
     html += `<tr>`;
-    cols.forEach(col => {
-      html += `<td>${col}</td>`;
+    cols.forEach(c => {
+      html += `<td>${c}</td>`;
     });
     html += `</tr>\n`;
   });
@@ -62,21 +62,21 @@ function markdownTableToHTML(mdTable) {
  * 3) Metnin içindeki Markdown tabloyu bulma (basit yol)
  ***************************************************/
 function processBotMessage(fullText, uniqueId) {
-  // 0) İsterseniz \n kaçışlarını gerçek satır sonuna dönüştürün
+  // Örneğin \n kaçışlarını gerçek satır sonuna dönüştürmek isterseniz:
   const normalizedText = fullText.replace(/\\n/g, "\n");
 
   // 1) [TextContentBlock(... value="...")] yapısını yakalayalım (opsiyonel)
   const extractedValue = extractTextContentBlock(normalizedText);
 
-  // eğer yakalanamadıysa, belki tablo metni doğrudan normal string olarak gelmiştir
+  // eğer yakalanamadıysa, belki tablo metni doğrudan normal string olarak gelir
   const textToCheck = extractedValue || normalizedText;
 
-  // 2) Basit bir regex ile tabloyu bulmaya çalışalım
+  // 2) Basit bir regex ile tabloyu bulalım
   const tableRegex = /(\|.*?\|\n\|.*?\|\n[\s\S]+)/;
   const tableMatch = tableRegex.exec(textToCheck);
 
   if (tableMatch && tableMatch[1]) {
-    // Burası tam tablo bölgesi (Markdown)
+    // Tablo bölgesi (Markdown)
     const markdownTable = tableMatch[1];
 
     // Tablonun öncesi ve sonrası
@@ -164,15 +164,15 @@ $(document).ready(function () {
       function readChunk() {
         return reader.read().then(({ done, value }) => {
           if (done) {
-            // Tüm chunk bitti => tablo vs. parse
+            // Köşeli parantezleri gizle
+            botMessage = botMessage.replace(/【.*?】/g, "");
+            // Tabloyu işleyelim
             processBotMessage(botMessage, uniqueId);
             return;
           }
 
-          // Chunk'ı stringe çevir
           const chunkText = decoder.decode(value, { stream: true });
           botMessage += chunkText;
-
           $("#messageFormeight").scrollTop($("#messageFormeight")[0].scrollHeight);
           return readChunk();
         });
