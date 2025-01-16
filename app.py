@@ -94,33 +94,74 @@ class ChatbotAPI:
             return jsonify({"error": "An error occurred."}), 500
 
     def _generate_response(self, user_message, user_id):
-        """Generate response using OpenAI and AttributeParser."""
-        self.logger.info(f"User ({user_id}) message: {user_message}")
-        assistant_id = self._select_assistant(user_message, user_id)
+        """
+        Generates a response by selecting an assistant ID and parsing OpenAI's response.
+        """
+        self.logger.info(f"Kullanıcı ({user_id}) mesajı: {user_message}")
+        assistant_id = self.user_states.get(user_id)
+
+        # Select assistant based on the user message
+        for aid, keywords in self.ASSISTANT_CONFIG.items():
+            if any(keyword.lower() in user_message.lower() for keyword in keywords):
+                assistant_id = aid
+                self.user_states[user_id] = assistant_id
+                break
 
         if not assistant_id:
-            yield jsonify({"response": "No suitable assistant found."}).get_data(as_text=True)
+            yield json.dumps({"response": "No suitable assistant found."})
             return
 
         try:
-            yield jsonify({"response": "Preparing response..."}).get_data(as_text=True)
+            # Initial "Preparing response..." message
+            yield json.dumps({"response": "Preparing response..."})
 
-            # OpenAI API interaction
-            content_value = self._interact_with_openai(user_message, assistant_id)
+            # Create ChatGPT thread
+            thread = self.client.beta.threads.create(
+                messages=[{"role": "user", "content": user_message}]
+            )
+            run = self.client.beta.threads.runs.create(
+                thread_id=thread.id, assistant_id=assistant_id
+            )
 
-            # Use AttributeParser for formatting
-            if content_value:
-                try:
-                    content_value = self.attribute_parser.parse_and_format_attributes(content_value)
-                except json.JSONDecodeError:
-                    self.logger.error("JSON parsing failed for response.")
-                    content_value = "Error parsing the response."
+            start_time = time.time()
+            timeout = 60
 
-            yield jsonify({"response": content_value}).get_data(as_text=True)
+            while time.time() - start_time < timeout:
+                run = self.client.beta.threads.runs.retrieve(
+                    thread_id=thread.id, run_id=run.id
+                )
+                if run.status == "completed":
+                    # Retrieve and parse OpenAI's response
+                    message_response = self.client.beta.threads.messages.list(
+                        thread_id=thread.id
+                    )
+                    content_value = self._parse_openai_response(message_response)
+                    print(content_value)
+                    # Delegate JSON parsing and formatting to AttributeParser
+                    try:
+                        content_value = self.attribute_parser.parse_nested_structure(content_value)
+                        print(content_value)
+                    except json.JSONDecodeError:
+                        self.logger.error("JSON parsing failed for response.")
+
+                    yield json.dumps({"response": content_value})
+                    return
+
+                elif run.status == "failed":
+                    self.logger.error("OpenAI run failed to generate a response.")
+                    yield json.dumps({"response": "Response generation failed."})
+                    return
+
+
+                time.sleep(0.5)
+
+            yield json.dumps({"response": "Response timed out."})
 
         except Exception as e:
             self.logger.error(f"Error generating response: {str(e)}")
-            yield jsonify({"response": "An error occurred."}).get_data(as_text=True)
+            
+            yield json.dumps({"response": f"An error occurred: {str(e)}"})
+
 
     def _select_assistant(self, user_message, user_id):
         """Select the appropriate assistant based on user message."""
@@ -160,6 +201,7 @@ class ChatbotAPI:
 
     def _parse_openai_response(self, message_response):
         """Extract and format the response from OpenAI."""
+        print(message_response.data)
         extracted_values = [
             block.text.value for msg in message_response.data if msg.role == "assistant"
             for block in msg.content if block.type == "text" and hasattr(block.text, "value")

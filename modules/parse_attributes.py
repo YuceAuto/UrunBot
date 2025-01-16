@@ -1,6 +1,4 @@
-import json
 import logging
-from modules.image_paths import ImagePaths, load_all_images  # Import the necessary modules
 
 class AttributeParser:
     """
@@ -31,28 +29,102 @@ class AttributeParser:
         Parses and formats attributes from the provided JSON.
 
         :param parsed_json: The parsed JSON containing attributes.
-        :return: A formatted string with the attributes and their images.
+        :return: A formatted dictionary with the attributes and their images.
         """
-        formatted_response = ""
+        formatted_response = {}
 
         for json_key, display_label in self.attribute_mappings:
             try:
                 items = parsed_json.get(json_key, [])
                 if items:
-                    formatted_response += f"{display_label}:
-"
+                    formatted_response[display_label] = []
                     for item in items:
-                        formatted_response += f"- {item}
-"
+                        item_entry = {"name": item, "images": []}
                         matching_images = self.image_paths.find_similar_images(item)
                         for name, path in matching_images:
-                            formatted_response += f"  [Image: {name}]({path})
-"
-                    formatted_response += "\n"
+                            item_entry["images"].append({"name": name, "path": path})
+                        formatted_response[display_label].append(item_entry)
             except Exception as e:
                 logging.error(f"Error processing attribute '{json_key}': {str(e)}")
 
         return formatted_response
+
+    def parse_custom_message_format(self, messages):
+        """
+        Custom parser for handling the specific message structure provided.
+
+        :param messages: List of Message objects with content to process.
+        :return: A formatted dictionary with attributes and related images.
+        """
+        formatted_response = {}
+
+        for message in messages:
+            if message.role == "assistant":
+                for content_block in message.content:
+                    if content_block.type == "text":
+                        raw_text = content_block.text.value
+                        formatted_response.update(self._parse_message_text(raw_text))
+
+        return formatted_response
+
+    def _parse_message_text(self, text):
+        """
+        Parses a single message text for attributes and related images.
+
+        :param text: Text content of the message.
+        :return: Dictionary with attributes and their related images.
+        """
+        parsed_response = {}
+
+        for json_key, display_label in self.attribute_mappings:
+            if json_key in text:
+                parsed_response[display_label] = []
+                items = self._extract_list_from_text(text)
+                for item in items:
+                    item_entry = {"name": item, "images": []}
+                    matching_images = self.image_paths.find_similar_images(item)
+                    for name, path in matching_images:
+                        item_entry["images"].append({"name": name, "path": path})
+                    parsed_response[display_label].append(item_entry)
+
+        return parsed_response
+
+    @staticmethod
+    def _extract_list_from_text(text):
+        """
+        Extracts a list of items from bullet-pointed text.
+
+        :param text: Text containing a list of items.
+        :return: List of extracted items.
+        """
+        lines = text.split("\n")
+        items = [line.strip("- ").strip() for line in lines if line.startswith("- ")]
+        return items
+
+    def parse_nested_structure(self, data, path=None):
+        """
+        Recursively parses a nested dictionary-like structure and prints key-value pairs with their hierarchical paths.
+
+        :param data: Dictionary or dictionary-like structure to parse.
+        :param path: Current hierarchy path (used for recursion).
+        :return: List of tuples containing (path, value).
+        """
+        if path is None:
+            path = []
+
+        results = []
+
+        if isinstance(data, dict):
+            for key, value in data.items():
+                results.extend(self.parse_nested_structure(value, path + [key]))
+        elif isinstance(data, list):
+            for index, item in enumerate(data):
+                results.extend(self.parse_nested_structure(item, path + [f"[{index}]"]))
+        else:
+            # Base case: leaf node
+            results.append(("->".join(path), data))
+
+        return results
 
     def update_mappings(self, new_mappings):
         """
