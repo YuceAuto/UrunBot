@@ -3,7 +3,7 @@ body, html {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: #6F797A; /* Sol arka plan rengi */
+  background: #6F797A; /* Sol arka plan */
   background: -webkit-linear-gradient(to right, #0E3A2F, #78FAAE);
   background: linear-gradient(to right, #0E3A2F, #78FAAE);
 }
@@ -29,7 +29,7 @@ body, html {
   flex-direction: column;
   height: 100%;
   border-radius: 15px !important;
-  background-color: #000000 !important; /* Sohbet penceresi arka plan rengi */
+  background-color: #000000 !important; 
 }
 .card-header.msg_head {
   display: flex;

@@ -1,99 +1,105 @@
 /***************************************************
- * 1) "value=''' ... '''" arasında geçen metni çekip al
+ * 1) [TextContentBlock(...)] içinde "value" içeriğini çıkarma (opsiyonel kullanım)
  ***************************************************/
-function extractJsonPlain(text) {
-  // 1) FileCitationAnnotation vb. gereksiz notasyonları silelim
-  let cleaned = text.replace(/\[FileCitationAnnotation[\s\S]*?\)\]/g, "");
-  cleaned = cleaned.replace(/【\d+:\d+†.*?】/g, "");
+function extractTextContentBlock(fullText) {
+  /*
+    Örnek pattern:
+    [TextContentBlock(
+      text=Text( ... value="Skoda Fabia...\n|Motor Tipi|..."
+    ), type='text')]
 
-  // 2) [TextContentBlock(...)] sarmalını da silebiliriz (sunucuda büyük ölçüde temizlendi)
-  cleaned = cleaned.replace(/\[TextContentBlock[\s\S]*?\)\]/g, "");
-
-  // 3) triple backtick code fence yakala -> ```json ... ```
-  const fenceRegex = /```(?:json)?([\s\S]*?)```/i;
-  const fenceMatch = fenceRegex.exec(cleaned);
-  if (fenceMatch && fenceMatch[1]) {
-    return fenceMatch[1].trim();
+    Aşağıdaki regex "value=" ve ardından gelen çift tırnak içindeki her şeyi yakalar.
+    Kısıtlı bir örnektir; karmaşık durumlarda ek regex/işlem gerekebilir.
+  */
+  const regex = /\[TextContentBlock\(.*?value=(['"])([\s\S]*?)\1.*?\)\]/;
+  const match = regex.exec(fullText);
+  if (match && match[2]) {
+    return match[2]; // value içeriği
   }
-
-  // 4) code fence yoksa => { ... } arayalım
-  const curlyRegex = /\{[\s\S]*\}/m;
-  const curlyMatch = curlyRegex.exec(cleaned);
-  if (curlyMatch && curlyMatch[0]) {
-    return curlyMatch[0].trim();
-  }
-
-  // JSON bulunamadı
   return null;
 }
 
 /***************************************************
- * 2) JSON'u tabloya dönüştüren (özyinelemeli) fonksiyon
+ * 2) Markdown tabloları HTML'e çevirme (basit yaklaşım, JS versiyonu)
  ***************************************************/
-function generateHTMLFromJSON(data) {
-  if (data == null) return "<i>null</i>";
-  if (typeof data !== "object") return String(data);
-  if (Array.isArray(data)) {
-    let html = `
-      <table class="table table-bordered table-sm" style="background-color:#fff; color:#000;">
-        <thead class="thead-light">
-          <tr><th style="width:50px;">#</th><th>Değer</th></tr>
-        </thead>
-        <tbody>
-    `;
-    data.forEach((item, index) => {
-      html += `
-        <tr>
-          <td>${index}</td>
-          <td>${generateHTMLFromJSON(item)}</td>
-        </tr>
-      `;
-    });
-    html += "</tbody></table>";
-    return html;
+function markdownTableToHTML(mdTable) {
+  const lines = mdTable.trim().split("\n").map(line => line.trim());
+  if (lines.length < 2) {
+    // Tablo yapısı yoksa direkt metin
+    return `<p>${mdTable}</p>`;
   }
 
-  // object
-  let html = `
-    <table class="table table-bordered table-sm" style="background-color:#fff; color:#000;">
-      <tbody>
-  `;
-  for (const [key, value] of Object.entries(data)) {
-    html += `
-      <tr>
-        <th>${key}</th>
-        <td>${generateHTMLFromJSON(value)}</td>
-      </tr>
-    `;
-  }
-  html += "</tbody></table>";
+  // 1. satır = başlık
+  const headerLine = lines[0];
+  const headerCells = headerLine.split("|").map(cell => cell.trim()).filter(Boolean);
+
+  // 2. satır = ayraç, geri kalan satırlar = veri
+  const bodyLines = lines.slice(2);
+
+  let html = `<table class="table table-bordered table-sm" style="background-color:#fff; color:#000;">\n<thead><tr>`;
+  headerCells.forEach(cell => {
+    html += `<th>${cell}</th>`;
+  });
+  html += `</tr></thead>\n<tbody>\n`;
+
+  bodyLines.forEach(line => {
+    if (!line.trim()) return; // Boş satırı atla
+    const cols = line.split("|").map(col => col.trim()).filter(Boolean);
+    if (cols.length === 0) return;
+
+    html += `<tr>`;
+    cols.forEach(col => {
+      html += `<td>${col}</td>`;
+    });
+    html += `</tr>\n`;
+  });
+
+  html += `</tbody>\n</table>`;
   return html;
 }
 
 /***************************************************
- * 3) processBotMessage: JSON bul -> parse -> tablo
+ * 3) Metnin içindeki Markdown tabloyu bulma (basit yol)
  ***************************************************/
 function processBotMessage(fullText, uniqueId) {
-  const maybeJson = extractJsonPlain(fullText);
-  if (maybeJson) {
-    try {
-      const jsonData = JSON.parse(maybeJson);
-      const tableHtml = generateHTMLFromJSON(jsonData);
-      $(`#botMessageContent-${uniqueId}`).html(tableHtml);
-      return;
-    } catch (err) {
-      console.warn("JSON.parse hatası:", err);
-      $(`#botMessageContent-${uniqueId}`).text(fullText);
-      return;
-    }
-  }
+  // 0) İsterseniz \n kaçışlarını gerçek satır sonuna dönüştürün
+  const normalizedText = fullText.replace(/\\n/g, "\n");
 
-  // JSON yoksa ham metin göster
-  $(`#botMessageContent-${uniqueId}`).text(fullText);
+  // 1) [TextContentBlock(... value="...")] yapısını yakalayalım (opsiyonel)
+  const extractedValue = extractTextContentBlock(normalizedText);
+
+  // eğer yakalanamadıysa, belki tablo metni doğrudan normal string olarak gelmiştir
+  const textToCheck = extractedValue || normalizedText;
+
+  // 2) Basit bir regex ile tabloyu bulmaya çalışalım
+  const tableRegex = /(\|.*?\|\n\|.*?\|\n[\s\S]+)/;
+  const tableMatch = tableRegex.exec(textToCheck);
+
+  if (tableMatch && tableMatch[1]) {
+    // Burası tam tablo bölgesi (Markdown)
+    const markdownTable = tableMatch[1];
+
+    // Tablonun öncesi ve sonrası
+    const beforeTable = textToCheck.slice(0, tableMatch.index).trim();
+    const afterTable = textToCheck.slice(tableMatch.index + markdownTable.length).trim();
+
+    const tableHTML = markdownTableToHTML(markdownTable);
+
+    // Ekrana basmak istediğimiz son HTML
+    let finalHTML = "";
+    if (beforeTable) finalHTML += `<p>${beforeTable}</p>`;
+    finalHTML += tableHTML;
+    if (afterTable) finalHTML += `<p>${afterTable}</p>`;
+
+    $(`#botMessageContent-${uniqueId}`).html(finalHTML);
+  } else {
+    // Tablolu regex tutmadı, belki tablo yoktur veya format farklıdır
+    $(`#botMessageContent-${uniqueId}`).text(textToCheck);
+  }
 }
 
 /***************************************************
- * 4) readChunk() + form submit
+ * 4) Form submit -> /ask -> chunk read
  ***************************************************/
 $(document).ready(function () {
   $("#messageArea").on("submit", function (e) {
@@ -119,10 +125,8 @@ $(document).ready(function () {
     $("#messageFormeight").append(userHtml);
     inputField.val("");
 
-    // BOT yanıtı için benzersiz ID (her mesaj ayrı)
-    const uniqueId = Date.now();  // Basit yöntem
-
-    // Bot yanıt balonu (her seferinde yeni HTML oluşturuyoruz!)
+    // Bot mesajı alanı
+    const uniqueId = Date.now();
     const botHtml = `
       <div class="d-flex justify-content-start mb-4">
         <img src="static/images/fotograf.png"
@@ -137,7 +141,7 @@ $(document).ready(function () {
     $("#messageFormeight").append(botHtml);
     $("#messageFormeight").scrollTop($("#messageFormeight")[0].scrollHeight);
 
-    // /ask endpoint -> fetch
+    // /ask endpoint
     fetch("/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -150,7 +154,7 @@ $(document).ready(function () {
       if (!response.ok) {
         throw new Error("Sunucu hatası: " + response.status);
       }
-      return response.body; // ReadableStream
+      return response.body;
     })
     .then(stream => {
       const reader = stream.getReader();
@@ -160,18 +164,16 @@ $(document).ready(function () {
       function readChunk() {
         return reader.read().then(({ done, value }) => {
           if (done) {
-            // Tüm chunk bitti -> final parse
+            // Tüm chunk bitti => tablo vs. parse
             processBotMessage(botMessage, uniqueId);
             return;
           }
 
+          // Chunk'ı stringe çevir
           const chunkText = decoder.decode(value, { stream: true });
           botMessage += chunkText;
 
-          // Anlık metni ID'si unique olan span'e yaz
-          $(`#botMessageContent-${uniqueId}`).text(botMessage);
           $("#messageFormeight").scrollTop($("#messageFormeight")[0].scrollHeight);
-
           return readChunk();
         });
       }
@@ -183,7 +185,7 @@ $(document).ready(function () {
     });
   });
 
-  // Örnek: 9. dakikada notification göster
+  // 9. dakikada uyarı gösterme
   setTimeout(() => {
     document.getElementById('notificationBar').style.display = 'block';
   }, 9 * 60 * 1000);

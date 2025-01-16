@@ -1,7 +1,7 @@
 import os
-import re
 import time
 import logging
+import re
 
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
@@ -10,28 +10,74 @@ import openai
 
 load_dotenv()
 
+def extract_markdown_tables_from_text(text):
+    """
+    Verilen text içinde '|' içeren satırları bularak potansiyel Markdown tablo satırlarını döndürür.
+    Birden fazla tablo bulunması durumunda, tabloları ardışık satırlara göre ayırır.
+    """
+    lines = text.splitlines()
+    tables = []
+    current_table = []
+
+    for line in lines:
+        if '|' in line.strip():
+            current_table.append(line)
+        else:
+            if current_table:
+                tables.append('\n'.join(current_table))
+                current_table = []
+    
+    if current_table:
+        tables.append('\n'.join(current_table))
+
+    return tables
+
+def markdown_table_to_html(md_table_str):
+    """
+    Basit bir Markdown tabloyu HTML tabloya dönüştürür.
+    """
+    lines = md_table_str.strip().split("\n")
+    if len(lines) < 2:
+        return f"<p>{md_table_str}</p>"
+    
+    # 1. satır başlık
+    header_cols = [col.strip() for col in lines[0].split("|") if col.strip()]
+    # 2. satır (ayraç) => lines[1], geri kalan satırlar => body
+    body_lines = lines[2:]  # satır 2'den sonuna
+
+    html = '<table class="table table-bordered table-sm" style="background-color:#fff; color:#000;">\n'
+    html += '<thead><tr>'
+    for col in header_cols:
+        html += f'<th>{col}</th>'
+    html += '</tr></thead>\n<tbody>\n'
+
+    for line in body_lines:
+        line = line.strip()
+        if not line:
+            continue
+        cols = [c.strip() for c in line.split("|") if c.strip()]
+        html += '<tr>'
+        for c in cols:
+            html += f'<td>{c}</td>'
+        html += '</tr>\n'
+
+    html += '</tbody>\n</table>'
+    return html
+
+
 class ChatbotAPI:
     def __init__(self, static_folder='static', template_folder='templates'):
-        """
-        Flask uygulamasını, loglamayı, OpenAI istemcisini ve asistan yapılandırmalarını
-        sınıf tabanlı şekilde başlatır.
-        """
-        # Flask uygulamasını başlat
-        self.app = Flask(
-            __name__,
-            static_folder=static_folder,
-            template_folder=template_folder
-        )
+        self.app = Flask(__name__,
+                         static_folder=static_folder,
+                         template_folder=template_folder)
         CORS(self.app)
 
-        # Loglama ayarları
         self.logger = self._setup_logger()
 
-        # .env içinden API anahtarını al
         openai.api_key = os.getenv("OPENAI_API_KEY")
         self.client = openai
 
-        # Asistan yapılandırması
+        # Örnek asistan yapılandırması (anahtar kelime -> asistan ID eşlemesi)
         self.ASSISTANT_CONFIG = {
             "asst_1qGG7y8w6QcupPETaYQRdGsI": ["Kamiq"],
             "asst_yeDl2aiHy0uoGGjHRmr2dlYB": ["Fabia"],
@@ -39,13 +85,9 @@ class ChatbotAPI:
         }
         self.user_states = {}
 
-        # Rota tanımları
         self._define_routes()
 
     def _setup_logger(self):
-        """
-        Uygulama için logger tanımlayıp döndürür.
-        """
         logger = logging.getLogger("ChatbotAPI")
         handler = logging.StreamHandler()
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -55,12 +97,9 @@ class ChatbotAPI:
         return logger
 
     def _define_routes(self):
-        """
-        Flask rotalarını tanımlar.
-        """
         @self.app.route("/", methods=["GET"])
         def home():
-            return self._home()
+            return render_template("index.html")
 
         @self.app.route("/ask", methods=["POST"])
         def ask():
@@ -70,16 +109,10 @@ class ChatbotAPI:
         def feedback():
             return self._feedback()
 
-    def _home(self):
-        """
-        Ana sayfa görünümü.
-        """
-        return render_template("index.html")
-
     def _ask(self):
         """
-        Kullanıcıdan gelen soruları (POST) işleyen endpoint.
-        Streaming (chunk) şeklinde yanıt döndürür.
+        Kullanıcının sorusunu alır, ChatGPT'ye gönderir ve yanıtı text/plain
+        olarak chunk halinde döndürür.
         """
         try:
             data = request.get_json()
@@ -95,18 +128,14 @@ class ChatbotAPI:
         if not user_message:
             return jsonify({"response": "Lütfen bir soru girin."})
 
-        # Yanıtı chunk olarak üreten generator
         response_generator = self._generate_response(user_message, user_id)
         return self.app.response_class(response_generator, mimetype="text/plain")
 
     def _generate_response(self, user_message, user_id):
-        """
-        Asistan ID seçer ve OpenAI üzerinden yanıtı parça parça (stream) oluşturur.
-        """
         self.logger.info(f"Kullanıcı ({user_id}) mesajı: {user_message}")
-        assistant_id = self.user_states.get(user_id)
 
-        # Mesaja göre asistan seç
+        # Kullanıcının mesajındaki anahtar kelimeler doğrultusunda asistan seçimi
+        assistant_id = self.user_states.get(user_id)
         for aid, keywords in self.ASSISTANT_CONFIG.items():
             if any(keyword.lower() in user_message.lower() for keyword in keywords):
                 assistant_id = aid
@@ -118,34 +147,53 @@ class ChatbotAPI:
             return
 
         try:
-            # ChatGPT thread oluştur
+            # Yeni bir thread oluştur
             thread = self.client.beta.threads.create(
                 messages=[{"role": "user", "content": user_message}]
             )
             run = self.client.beta.threads.runs.create(
-                thread_id=thread.id, assistant_id=assistant_id
+                thread_id=thread.id,
+                assistant_id=assistant_id
             )
 
-            start_time = time.time()
-            timeout = 30
-
-            # İlk "Yanıt hazırlanıyor..." mesajı
             yield "Yanıt hazırlanıyor...\n".encode("utf-8")
 
+            start_time = time.time()
+            timeout = 30  # 30 saniye bekleme süresi
+
             while time.time() - start_time < timeout:
-                run = self.client.beta.threads.runs.retrieve(
-                    thread_id=thread.id, run_id=run.id
-                )
+                run = self.client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
+
                 if run.status == "completed":
-                    # Yanıtı al
-                    message_response = self.client.beta.threads.messages.list(
-                        thread_id=thread.id
-                    )
+                    # Asistan cevabı hazır
+                    message_response = self.client.beta.threads.messages.list(thread_id=thread.id)
                     for msg in message_response.data:
                         if msg.role == "assistant":
                             content = str(msg.content)
-                            # Triple backtick içeriğini koruyan fonksiyonla temizle
-                            content = self._strip_textcontentblock_keep_value(content)
+
+                            # 1) value="..." içeriğini bulmaya çalışalım
+                            pattern = r'value="([^"]+)"'
+                            match = re.search(pattern, content)
+                            if match:
+                                extracted_text = match.group(1)
+                                # Kaçış karakterlerini düzelt
+                                extracted_text = extracted_text.replace("\\n", "\n")
+
+                                # 2) Tabloları Markdown olarak ayrıştır
+                                tables = extract_markdown_tables_from_text(extracted_text)
+                                if tables:
+                                    self.logger.info(f"Bulunan tablolar: {tables}")
+
+                                    # İsterseniz tabloyu HTML'e dönüştürüp
+                                    # client'a HTML olarak da gönderebilirsiniz:
+                                    for i, tbl in enumerate(tables, 1):
+                                        html_table = markdown_table_to_html(tbl)
+                                        # Deneme amaçlı tabloyu HTML olarak gönderelim
+                                        yield f"\n--- Tablo {i} (HTML) ---\n".encode("utf-8")
+                                        yield html_table.encode("utf-8")
+                                        yield b"\n"
+
+                            # Son olarak orijinal cevabı da gönderelim
                             yield content.encode("utf-8")
                     return
 
@@ -153,45 +201,18 @@ class ChatbotAPI:
                     yield "Yanıt oluşturulamadı.\n".encode("utf-8")
                     return
 
-                # . animasyon satırı kaldırıldı (isterseniz ekleyebilirsiniz)
                 time.sleep(0.5)
 
+            # Zaman aşımı
             yield "Yanıt alma zaman aşımına uğradı.\n".encode("utf-8")
 
         except Exception as e:
             self.logger.error(f"Yanıt oluşturma hatası: {str(e)}")
             yield f"Bir hata oluştu: {str(e)}\n".encode("utf-8")
 
-    def _strip_textcontentblock_keep_value(self, original_text):
-        """
-        [TextContentBlock(...)] -> triple backtick JSON
-        Sadece triple backtick içindeki veriyi koruyor, dışını atıyor.
-        """
-        pattern = r"""
-        \[TextContentBlock         # Blokların başlangıcı
-        \(                         # Parantez
-        .*?                        # type, text, vs. rastgele
-        value=['\"`]{3}            # triple tırnak veya backtick
-        ([\s\S]*?)                 # <-- Yakalamak istediğimiz "value" içeriği
-        ['\"`]{3}                  # triple tırnak/backtick kapanışı
-        .*?                        # Kalan kısımları (annotations vs.)
-        \)                         # Blok parantez sonu
-        \]                         # Köşeli parantez kapanışı
-        """
-
-        compiled = re.compile(pattern, flags=re.VERBOSE | re.DOTALL)
-
-        def replacer(match):
-            # Yakalanan group(1) -> triple backtick içi
-            inner_value = match.group(1)
-            # Bunu tekrar code fence'e sararak geri döndürüyoruz
-            return f"```json\n{inner_value}\n```"
-
-        return compiled.sub(replacer, original_text)
-
     def _feedback(self):
         """
-        Geri bildirim endpoint'i.
+        Örnek bir feedback endpoint
         """
         try:
             data = request.get_json()
@@ -202,9 +223,6 @@ class ChatbotAPI:
             return jsonify({"error": "Bir hata oluştu."}), 500
 
     def run(self, debug=True):
-        """
-        Flask uygulamasını çalıştırır.
-        """
         self.app.run(debug=debug)
 
 
