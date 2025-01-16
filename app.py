@@ -3,7 +3,8 @@ import time
 import logging
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
-import openai as OpenAI
+import openai
+from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -74,22 +75,22 @@ class ChatbotAPI:
         try:
             data = request.get_json()
             if not data:
-                return jsonify({"error": "Geçersiz JSON formatı."}), 400
+                return jsonify({"error": "Invalid JSON format."}), 400
 
             user_message = data.get("question", "")
             user_id = data.get("user_id", "default_user")
 
             if not user_message:
-                return jsonify({"response": "Lütfen bir soru girin."})
+                return jsonify({"response": "Please provide a question."})
 
-            self.logger.info(f"Kullanıcı ({user_id}) mesajı: {user_message}")
+            self.logger.info(f"User ({user_id}) message: {user_message}")
 
             response_generator = self._generate_response(user_message, user_id)
             return self.app.response_class(response_generator, mimetype="text/plain")
 
         except Exception as e:
-            self.logger.error(f"Hata: {str(e)}")
-            return jsonify({"error": "Bir hata oluştu."}), 500
+            self.logger.error(f"Error: {str(e)}")
+            return jsonify({"error": "An error occurred."}), 500
 
     def _generate_response(self, user_message, user_id):
         """
@@ -97,6 +98,7 @@ class ChatbotAPI:
         """
         assistant_id = self.user_states.get(user_id)
 
+        # Match the user_message with a specific assistant based on keywords
         for aid, keywords in self.ASSISTANT_CONFIG.items():
             if any(keyword.lower() in user_message.lower() for keyword in keywords):
                 assistant_id = aid
@@ -104,17 +106,17 @@ class ChatbotAPI:
                 break
 
         if not assistant_id:
-            yield "Uygun bir asistan bulunamadı.\n".encode("utf-8")
+            yield "No suitable assistant found.\n".encode("utf-8")
             return
 
         try:
-            yield "Yanıt hazırlanıyor...\n".encode("utf-8")
+            yield "Preparing a response...\n".encode("utf-8")
 
-            # Simulate OpenAI response generation
-            response = self.client.ChatCompletion.create(
-                model="gpt-3.5-turbo",
+            # Use the correct OpenAI API method
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
                 messages=[
-                    {"role": "system", "content": f"You are {assistant_id}"},
+                    {"role": "system", "content": f"You are {assistant_id}."},
                     {"role": "user", "content": user_message}
                 ]
             )
@@ -125,11 +127,12 @@ class ChatbotAPI:
                     yield char.encode("utf-8")
                     time.sleep(0.01)
             else:
-                yield "Yanıt oluşturulamadı.\n".encode("utf-8")
+                yield "Could not generate a response.\n".encode("utf-8")
 
         except Exception as e:
-            self.logger.error(f"Yanıt oluşturma hatası: {str(e)}")
-            yield f"Bir hata oluştu: {str(e)}\n".encode("utf-8")
+            self.logger.error(f"Error generating response: {str(e)}")
+            yield f"An error occurred: {str(e)}\n".encode("utf-8")
+
 
     def _handle_feedback_route(self):
         """
@@ -137,11 +140,11 @@ class ChatbotAPI:
         """
         try:
             data = request.get_json()
-            self.logger.info(f"Geri bildirim alındı: {data}")
-            return jsonify({"message": "Geri bildiriminiz için teşekkür ederiz!"})
+            self.logger.info(f"Feedback received: {data}")
+            return jsonify({"message": "Thank you for your feedback!"})
         except Exception as e:
-            self.logger.error(f"Geri bildirim hatası: {str(e)}")
-            return jsonify({"error": "Bir hata oluştu."}), 500
+            self.logger.error(f"Feedback error: {str(e)}")
+            return jsonify({"error": "An error occurred."}), 500
 
     def run(self, debug=True):
         """
