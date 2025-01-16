@@ -77,56 +77,61 @@ function processBotMessage(fullText, uniqueId) {
   let parsedResponse;
 
   try {
-    // JSON parse etmeye çalış
-    parsedResponse = JSON.parse(fullText);
+      // Parse the JSON response
+      parsedResponse = JSON.parse(fullText);
   } catch (err) {
-    console.error("JSON.parse hatası:", err);
-    console.log("Gelen metin:", fullText); // Yanıtın ne olduğunu gör
-    $(`#botMessageContent-${uniqueId}`).text("Yanıt JSON formatında değil: " + fullText);
-    return;
+      console.error("JSON.parse error:", err);
+      console.log("Received text:", fullText); // Log the full response for debugging
+      $(`#botMessageContent-${uniqueId}`).text("Response is not in JSON format: " + fullText);
+      return;
   }
 
-  // Yanıt JSON formatındaysa metni işleyin
-  const botMessageContent = parsedResponse.response || "Yanıt alınamadı.";
+  // Extract response text and images
+  const botMessageContent = parsedResponse.response || "No response available.";
   const images = parsedResponse.images || [];
 
   if (botMessageContent === "Preparing response...") {
-    $(`#botMessageContent-${uniqueId}`).text(botMessageContent);
+      // Display the "Preparing response..." message
+      $(`#botMessageContent-${uniqueId}`).text(botMessageContent);
 
-    if (images.length > 0) {
-      let imageHtml = `<div class="image-container" style="margin-top: 10px;">`;
-      images.forEach(image => {
-        imageHtml += `
-          <div style="display: inline-block; margin: 5px;">
-            <img src="${image.url}" alt="${image.name}" style="max-width: 100px; max-height: 100px; border: 1px solid #ddd; border-radius: 4px; padding: 5px;" />
-            <p style="text-align: center; font-size: 12px; color: #555;">${image.name}</p>
-          </div>
-        `;
-      });
-      imageHtml += `</div>`;
-      $(`#botMessageContent-${uniqueId}`).append(imageHtml);
-    }
+      // Display images if any during preparation
+      if (images.length > 0) {
+          let imageHtml = `<div class="image-container" style="margin-top: 10px;">`;
+          images.forEach(image => {
+              imageHtml += `
+                  <div style="display: inline-block; margin: 5px;">
+                      <img src="${image.url}" alt="${image.name}" 
+                           style="max-width: 100px; max-height: 100px; border: 1px solid #ddd; border-radius: 4px; padding: 5px;" />
+                      <p style="text-align: center; font-size: 12px; color: #555;">${image.name}</p>
+                  </div>
+              `;
+          });
+          imageHtml += `</div>`;
+          $(`#botMessageContent-${uniqueId}`).append(imageHtml);
+      }
 
-    return;
+      return;
   }
 
-  // Tam yanıt ve resimleri göster
-  let htmlContent = `<p>${botMessageContent}</p>`;
+  // Display the final response with images
+  let htmlContent = `<p>${botMessageContent.replace(/\n/g, "<br>")}</p>`; // Replace `\n` with `<br>` for proper formatting
   if (images.length > 0) {
-    htmlContent += `<div class="image-container" style="margin-top: 10px;">`;
-    images.forEach(image => {
-      htmlContent += `
-        <div style="display: inline-block; margin: 5px;">
-          <img src="${image.url}" alt="${image.name}" style="max-width: 100px; max-height: 100px; border: 1px solid #ddd; border-radius: 4px; padding: 5px;" />
-          <p style="text-align: center; font-size: 12px; color: #555;">${image.name}</p>
-        </div>
-      `;
-    });
-    htmlContent += `</div>`;
+      htmlContent += `<div class="image-container" style="margin-top: 10px;">`;
+      images.forEach(image => {
+          htmlContent += `
+              <div style="display: inline-block; margin: 5px;">
+                  <img src="${image.url}" alt="${image.name}" 
+                       style="max-width: 100px; max-height: 100px; border: 1px solid #ddd; border-radius: 4px; padding: 5px;" />
+                  <p style="text-align: center; font-size: 12px; color: #555;">${image.name}</p>
+              </div>
+          `;
+      });
+      htmlContent += `</div>`;
   }
 
   $(`#botMessageContent-${uniqueId}`).html(htmlContent);
 }
+
 
 /***************************************************
  * 4) readChunk() + form submit

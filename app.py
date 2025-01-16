@@ -1,39 +1,46 @@
 import os
-import re
 import time
 import json
 import openai
 import logging
-
-from rapidfuzz import fuzz
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from dotenv import load_dotenv
 from modules.image_paths import ImagePaths
-from flask import Flask, request, jsonify, render_template
+from modules.parse_attributes import AttributeParser
 
 load_dotenv()
 
 class ChatbotAPI:
     def __init__(self, static_folder='static', template_folder='templates'):
+        # Initialize Flask app
         self.app = Flask(
             __name__,
             static_folder=static_folder,
             template_folder=template_folder
         )
         CORS(self.app)
+
+        # Set up logging
         self.logger = self._setup_logger()
+
+        # OpenAI API setup
         openai.api_key = os.getenv("OPENAI_API_KEY")
         self.client = openai
-        self.ASSISTANT_CONFIG = {
-            "asst_1qGG7y8w6QcupPETaYQRdGsI": ["Kamiq"],
-            "asst_yeDl2aiHy0uoGGjHRmr2dlYB": ["Fabia"],
-            "asst_njSG1NVgg4axJFmvVYAIXrpM": ["Scala"],
-        }
+
+        # Load configurations
+        self.ASSISTANT_CONFIG = self._load_assistant_config()
         self.user_states = {}
+
+        # Load ImagePaths and AttributeParser
         self.image_paths = ImagePaths()
+        self.attribute_parser = AttributeParser(self.image_paths)
+
+        # Define routes
         self._define_routes()
 
     def _setup_logger(self):
+        """Set up a logger for the application."""
         logger = logging.getLogger("ChatbotAPI")
         handler = logging.StreamHandler()
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -42,7 +49,16 @@ class ChatbotAPI:
         logger.setLevel(logging.INFO)
         return logger
 
+    def _load_assistant_config(self):
+        """Load assistant configuration."""
+        return {
+            "asst_1qGG7y8w6QcupPETaYQRdGsI": ["Kamiq"],
+            "asst_yeDl2aiHy0uoGGjHRmr2dlYB": ["Fabia"],
+            "asst_njSG1NVgg4axJFmvVYAIXrpM": ["Scala"],
+        }
+
     def _define_routes(self):
+        """Define Flask routes."""
         @self.app.route("/", methods=["GET"])
         def home():
             return self._home()
@@ -52,9 +68,11 @@ class ChatbotAPI:
             return self._ask()
 
     def _home(self):
+        """Home page rendering."""
         return render_template("index.html")
 
     def _ask(self):
+        """Handle user queries."""
         try:
             data = request.get_json()
             if not data:
@@ -72,97 +90,85 @@ class ChatbotAPI:
             return self.app.response_class(response_generator, mimetype="application/json")
 
         except Exception as e:
-            self.logger.error(f"Error: {str(e)}")
+            self.logger.error(f"Error in /ask endpoint: {str(e)}")
             return jsonify({"error": "An error occurred."}), 500
 
     def _generate_response(self, user_message, user_id):
-        """
-        Asistan ID seçer ve OpenAI üzerinden yanıtı parça parça (stream) oluşturur.
-        """
-        self.logger.info(f"Kullanıcı ({user_id}) mesajı: {user_message}")
-        assistant_id = self.user_states.get(user_id)
+        """Generate response using OpenAI and AttributeParser."""
+        self.logger.info(f"User ({user_id}) message: {user_message}")
+        assistant_id = self._select_assistant(user_message, user_id)
 
-        # Mesaja göre asistan seç
+        if not assistant_id:
+            yield jsonify({"response": "No suitable assistant found."}).get_data(as_text=True)
+            return
+
+        try:
+            yield jsonify({"response": "Preparing response..."}).get_data(as_text=True)
+
+            # OpenAI API interaction
+            content_value = self._interact_with_openai(user_message, assistant_id)
+
+            # Use AttributeParser for formatting
+            if content_value:
+                try:
+                    content_value = self.attribute_parser.parse_and_format_attributes(content_value)
+                except json.JSONDecodeError:
+                    self.logger.error("JSON parsing failed for response.")
+                    content_value = "Error parsing the response."
+
+            yield jsonify({"response": content_value}).get_data(as_text=True)
+
+        except Exception as e:
+            self.logger.error(f"Error generating response: {str(e)}")
+            yield jsonify({"response": "An error occurred."}).get_data(as_text=True)
+
+    def _select_assistant(self, user_message, user_id):
+        """Select the appropriate assistant based on user message."""
+        assistant_id = self.user_states.get(user_id)
         for aid, keywords in self.ASSISTANT_CONFIG.items():
             if any(keyword.lower() in user_message.lower() for keyword in keywords):
                 assistant_id = aid
                 self.user_states[user_id] = assistant_id
                 break
+        return assistant_id
 
-        if not assistant_id:
-            response = {"response": "No suitable assistant found.", "images": []}
-            self.logger.info(f"Yanıt JSON formatı: {json.dumps(response)}")  # Console log
-            return jsonify(response)
-
+    def _interact_with_openai(self, user_message, assistant_id):
+        """Interact with OpenAI API and retrieve the response."""
         try:
-            # Resim eşleşmelerini bul
-            similar_images = self.image_paths.find_similar_images(user_message)
-            image_urls = [
-                {
-                    "name": img["name"],
-                    "url": f"/static/images/{os.path.basename(img['path'])}"
-                }
-                for img in similar_images
-            ]
-
-            # ChatGPT thread oluştur
-            thread = self.client.beta.threads.create(
-                messages=[{"role": "user", "content": user_message}]
-            )
-            run = self.client.beta.threads.runs.create(
-                thread_id=thread.id, assistant_id=assistant_id
-            )
-
+            thread = self.client.beta.threads.create(messages=[{"role": "user", "content": user_message}])
+            run = self.client.beta.threads.runs.create(thread_id=thread.id, assistant_id=assistant_id)
+            
             start_time = time.time()
-            timeout = 30
-
-            # İlk "Yanıt hazırlanıyor..." mesajı
-            initial_response = {"response": "Preparing response...", "images": image_urls}
-            self.logger.info(f"Başlangıç JSON formatı: {json.dumps(initial_response)}")  # Console log
-            yield json.dumps(initial_response).encode("utf-8")
+            timeout = 60
 
             while time.time() - start_time < timeout:
-                run = self.client.beta.threads.runs.retrieve(
-                    thread_id=thread.id, run_id=run.id
-                )
+                run = self.client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
                 if run.status == "completed":
-                    # Yanıtı al
-                    message_response = self.client.beta.threads.messages.list(
-                        thread_id=thread.id
-                    )
-                    for msg in message_response.data:
-                        if msg.role == "assistant":
-                            content = str(msg.content)
-                            response = {
-                                "response": content,
-                                "images": image_urls
-                            }
-                            self.logger.info(f"Tamamlanan yanıt JSON formatı: {json.dumps(response)}")  # Console log
-                            yield json.dumps(response).encode("utf-8")
-                    return
+                    messages = self.client.beta.threads.messages.list(thread_id=thread.id)
+                    return self._parse_openai_response(messages)
 
                 elif run.status == "failed":
-                    failed_response = {"response": "Response generation failed."}
-                    self.logger.info(f"Hata JSON formatı: {json.dumps(failed_response)}")  # Console log
-                    yield json.dumps(failed_response).encode("utf-8")
-                    return
+                    return "Response generation failed."
 
                 time.sleep(0.5)
 
-            timeout_response = {"response": "Response timed out."}
-            self.logger.info(f"Zaman aşımı JSON formatı: {json.dumps(timeout_response)}")  # Console log
-            yield json.dumps(timeout_response).encode("utf-8")
+            return "Response timed out."
 
         except Exception as e:
-            self.logger.error(f"Error generating response: {str(e)}")
-            error_response = {"response": f"An error occurred: {str(e)}", "images": []}
-            self.logger.info(f"Exception JSON formatı: {json.dumps(error_response)}")  # Console log
-            yield json.dumps(error_response).encode("utf-8")
+            self.logger.error(f"Error interacting with OpenAI: {str(e)}")
+            return None
 
+    def _parse_openai_response(self, message_response):
+        """Extract and format the response from OpenAI."""
+        extracted_values = [
+            block.text.value for msg in message_response.data if msg.role == "assistant"
+            for block in msg.content if block.type == "text" and hasattr(block.text, "value")
+        ]
+        return "\n".join(extracted_values) if extracted_values else "No valid content found."
 
     def run(self, debug=True):
+        """Run the Flask app."""
         self.app.run(debug=debug)
-
 
 if __name__ == "__main__":
     chatbot = ChatbotAPI()
