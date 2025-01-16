@@ -1,11 +1,13 @@
 import os
 import time
-import logging
-
-from flask import Flask, request, jsonify, render_template
-from dotenv import load_dotenv
-from flask_cors import CORS
+import json
 import openai
+import logging
+from rapidfuzz import fuzz
+from flask_cors import CORS
+from dotenv import load_dotenv
+from modules.image_paths import ImagePaths
+from flask import Flask, request, jsonify, render_template
 
 load_dotenv()
 
@@ -37,6 +39,9 @@ class ChatbotConfig:
             "asst_njSG1NVgg4axJFmvVYAIXrpM": ["Scala"],
         }
         self.user_states = {}
+
+        # Initialize image paths from the external module
+        self.image_paths = ImagePaths()
 
         # Define routes
         self._define_routes()
@@ -93,7 +98,7 @@ class ChatbotConfig:
             self.logger.info(f"User ({user_id}) message: {user_message}")
 
             response_generator = self._generate_response(user_message, user_id)
-            return self.app.response_class(response_generator, mimetype="text/plain")
+            return self.app.response_class(response_generator, mimetype="application/json")
 
         except Exception as e:
             self.logger.error(f"Error: {str(e)}")
@@ -113,53 +118,48 @@ class ChatbotConfig:
                 break
 
         if not assistant_id:
-            yield "No suitable assistant found.\n".encode("utf-8")
+            yield json.dumps({"response": "No suitable assistant found."}).encode("utf-8")
             return
 
         try:
-            thread = self.client.beta.threads.create(
-                messages=[{"role": "user", "content": user_message}]
-            )
-            run = self.client.beta.threads.runs.create(thread_id=thread.id, assistant_id=assistant_id)
+            # Find similar images
+            similar_images = self.image_paths.find_similar_images(user_message)
 
-            start_time = time.time()
-            timeout = 30
-            yield "Preparing a response\n".encode("utf-8")
+            # Simulate response generation
+            response = {
+                "response": f"Generated response for {assistant_id}.",
+                "images": similar_images
+            }
+            yield json.dumps(response).encode("utf-8")
 
-            while time.time() - start_time < timeout:
-                run = self.client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-                if run.status == "completed":
-                    message_response = self.client.beta.threads.messages.list(thread_id=thread.id)
-                    for msg in message_response.data:
-                        if msg.role == "assistant":
-                            content = str(msg.content)
-                            # Simulate typing effect
-                            for char in content:
-                                yield char.encode("utf-8")
-                                time.sleep(0.01)
-                    return
-                elif run.status == "failed":
-                    yield "Response generation failed.\n".encode("utf-8")
-                    return
-                yield ".".encode("utf-8")
-                time.sleep(0.5)
-
-            yield "Response timed out.\n".encode("utf-8")
         except Exception as e:
             self.logger.error(f"Error generating response: {str(e)}")
-            yield f"An error occurred: {str(e)}\n".encode("utf-8")
+            error_response = {"response": f"An error occurred: {str(e)}"}
+            yield json.dumps(error_response).encode("utf-8")
 
     def _handle_feedback_route(self):
-            """
-            Handle user feedback via POST requests.
-            """
-            try:
-                data = request.get_json()
-                self.logger.info(f"Feedback received: {data}")
-                return jsonify({"message": "Thank you for your feedback!"})
-            except Exception as e:
-                self.logger.error(f"Feedback error: {str(e)}")
-                return jsonify({"error": "An error occurred."}), 500
+        """
+        Handle user questions via POST requests.
+        """
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({"error": "Invalid JSON format."}), 400
+
+            user_message = data.get("question", "")
+            user_id = data.get("user_id", "default_user")
+
+            if not user_message:
+                return jsonify({"response": "Please provide a question."})
+
+            self.logger.info(f"User ({user_id}) message: {user_message}")
+
+            response_generator = self._generate_response(user_message, user_id)
+            return self.app.response_class(response_generator, mimetype="application/json")
+
+        except Exception as e:
+            self.logger.error(f"Error: {str(e)}")
+            return jsonify({"error": "An error occurred."}), 500
 
     def run(self, debug=True):
         """

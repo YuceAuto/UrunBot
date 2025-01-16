@@ -38,7 +38,7 @@ class ImagePaths:
         """
         return dict(self._images)
 
-    def get_images_by_keyword(self, keyword):
+    def find_similar_images(self, keyword):
         """
         Retrieve images whose names contain the given keyword (case-insensitive).
 
