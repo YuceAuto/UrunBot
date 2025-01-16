@@ -57,7 +57,7 @@ def load_all_images(image_storage):
     Adjust the paths as needed.
     """
     ROOT_DIR = os.path.abspath(os.curdir)
-    ASSET_DIR = os.path.join(ROOT_DIR, "assets", "images")
+    ASSET_DIR = os.path.join(ROOT_DIR, "static", "images")
 
     image_definitions = {
         # FABIA

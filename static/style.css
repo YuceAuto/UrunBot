@@ -2,50 +2,92 @@
 body, html {
   margin: 0;
   padding: 0;
-  height: 100%; 
+  height: 100%;
   background: #6F797A; /* Sol arka plan rengi */
   background: -webkit-linear-gradient(to right, #0E3A2F, #78FAAE);
   background: linear-gradient(to right, #0E3A2F, #78FAAE);
 }
 
+.container-fluid, .row.justify-content-center.h-100 {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-width: 95%;
+  min-width: 760px;
+  height: 100%;
+}
 .card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   border-radius: 15px !important;
   background-color: #000000 !important; /* Sohbet penceresi arka plan rengi */
 }
-
-.contacts_body {
-  padding: 0.75rem 0 !important;
-  overflow-y: auto;
-  white-space: nowrap;
-}
-
-.msg_card_body {
-  overflow-y: auto;
-}
-
-.card-header {
+.card-header.msg_head {
+  display: flex;
+  align-items: center;
+  background-color: #000;
+  color: #FFFFFF;
   border-radius: 15px 15px 0 0 !important;
   border-bottom: 0 !important;
 }
-
 .card-footer {
   border-radius: 0 0 15px 15px !important;
   border-top: 0 !important;
+  display: flex;
 }
 
-.container {
-  align-content: center;
+.msg_card_body {
+  flex: 1;
+  overflow-y: auto;
 }
 
-.search {
-  border-radius: 15px 0 0 15px !important;
-  background-color: rgba(0,0,0,0.3) !important;
-  border: 0 !important;
-  color: white !important;
+.user_img {
+  height: 70px;
+  width: 70px;
+  border: 1.5px solid #f5f6fa;
 }
-.search:focus {
-  box-shadow: none !important;
-  outline: 0px !important;
+.user_img_msg {
+  height: 40px;
+  width: 40px;
+  border: 1.5px solid #f5f6fa;
+}
+.img_cont {
+  position: relative;
+  height: 70px;
+  width: 70px;
+}
+.online_icon {
+  position: absolute;
+  height: 15px;
+  width: 15px;
+  background-color: #4cd137;
+  border-radius: 50%;
+  bottom: 0.2em;
+  right: 0.4em;
+  border: 1.5px solid white;
+}
+
+.user_info {
+  margin-top: auto;
+  margin-bottom: auto;
+  margin-left: 15px;
+}
+.user_info span {
+  font-size: 20px;
+  color: white;
+}
+.user_info p {
+  font-size: 10px;
+  color: rgba(255,255,255,0.6);
 }
 
 .type_msg {
@@ -54,9 +96,6 @@ body, html {
   color: #78FAAE !important;
   height: 60px !important;
   overflow-y: auto;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   padding-right: 0;
 }
 .type_msg:focus {
@@ -81,89 +120,6 @@ body, html {
   border: 2px solid black;
 }
 
-.search_btn {
-  border-radius: 0 15px 15px 0 !important;
-  background-color: rgba(0,0,0,0.3) !important;
-  border: 0 !important;
-  color: white !important;
-  cursor: pointer;
-}
-
-.contacts {
-  list-style: none;
-  padding: 0;
-}
-.contacts li {
-  width: 100% !important;
-  padding: 5px 10px;
-  margin-bottom: 15px !important;
-}
-
-.active {
-  background-color: rgba(0,0,0,0.3);
-}
-
-.user_img {
-  height: 70px;
-  width: 70px;
-  border: 1.5px solid #f5f6fa;
-}
-.user_img_msg {
-  height: 40px;
-  width: 40px;
-  border: 1.5px solid #f5f6fa;
-}
-
-.img_cont {
-  position: relative;
-  height: 70px;
-  width: 70px;
-}
-.img_cont_msg {
-  height: 40px;
-  width: 40px;
-}
-
-.online_icon {
-  position: absolute;
-  height: 15px;
-  width: 15px;
-  background-color: #4cd137;
-  border-radius: 50%;
-  bottom: 0.2em;
-  right: 0.4em;
-  border: 1.5px solid white;
-}
-
-.offline {
-  background-color: #c23616 !important;
-}
-
-.user_info {
-  margin-top: auto;
-  margin-bottom: auto;
-  margin-left: 15px;
-}
-.user_info span {
-  font-size: 20px;
-  color: white;
-}
-.user_info p {
-  font-size: 10px;
-  color: rgba(255,255,255,0.6);
-}
-
-.video_cam {
-  margin-left: 50px;
-  margin-top: 5px;
-}
-.video_cam span {
-  color: white;
-  font-size: 20px;
-  cursor: pointer;
-  margin-right: 20px;
-}
-
 .msg_cotainer {
   margin-top: auto;
   margin-bottom: auto;
@@ -172,6 +128,7 @@ body, html {
   background-color: rgb(82, 172, 255);
   padding: 10px;
   position: relative;
+  color: #000;
 }
 .msg_cotainer_send {
   margin-top: auto;
@@ -181,6 +138,7 @@ body, html {
   background-color: #58cc71;
   padding: 10px;
   position: relative;
+  color: #000;
 }
 
 .msg_time {
@@ -196,53 +154,4 @@ body, html {
   bottom: -15px;
   color: rgba(255,255,255,0.5);
   font-size: 10px;
-}
-
-.msg_head {
-  position: relative;
-}
-#action_menu_btn {
-  position: absolute;
-  right: 10px;
-  top: 10px;
-  color: white;
-  cursor: pointer;
-  font-size: 20px;
-}
-.action_menu {
-  z-index: 1;
-  position: absolute;
-  padding: 15px 0;
-  background-color: rgba(0,0,0,0.5);
-  color: white;
-  border-radius: 15px;
-  top: 30px;
-  right: 15px;
-  display: none;
-}
-.action_menu ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-.action_menu ul li {
-  width: 100%;
-  padding: 10px 15px;
-  margin-bottom: 5px;
-}
-.action_menu ul li i {
-  padding-right: 10px;
-}
-.action_menu ul li:hover {
-  cursor: pointer;
-  background-color: rgba(0,0,0,0.2);
-}
-
-@media(max-width: 576px) {
-  .contacts_card {
-      margin-bottom: 15px !important;
-  }
-  .chat {
-      min-width: auto !important;
-  }
 }
