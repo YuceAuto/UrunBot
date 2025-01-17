@@ -1,6 +1,3 @@
-/***************************************************
- * 1) [TextContentBlock(...)] içinde "value" içeriğini çıkarma (opsiyonel)
- ***************************************************/
 function extractTextContentBlock(fullText) {
   const regex = /\[TextContentBlock\(.*?value=(['"])([\s\S]*?)\1.*?\)\]/;
   const match = regex.exec(fullText);
@@ -10,9 +7,6 @@ function extractTextContentBlock(fullText) {
   return null;
 }
 
-/***************************************************
- * 2) Markdown tabloları HTML'e çevirme (basit yaklaşım)
- ***************************************************/
 function markdownTableToHTML(mdTable) {
   const lines = mdTable.trim().split("\n").map(line => line.trim());
   if (lines.length < 2) {
@@ -45,50 +39,35 @@ function markdownTableToHTML(mdTable) {
   return html;
 }
 
-/***************************************************
- * 3) Metnin içindeki Markdown tabloyu bulma (basit yol)
- ***************************************************/
 function processBotMessage(fullText, uniqueId) {
-  // \n kaçışlarını gerçek satır sonlarına çevir
   const normalizedText = fullText.replace(/\\n/g, "\n");
-
-  // 1) [TextContentBlock(... value="...")] yapısını yakalayalım (opsiyonel)
   const extractedValue = extractTextContentBlock(normalizedText);
-
   const textToCheck = extractedValue || normalizedText;
 
-  // 2) Basit bir regex ile tabloyu bulma
+  // Bir tablo var mı diye regex ile bak
   const tableRegex = /(\|.*?\|\n\|.*?\|\n[\s\S]+)/;
   const tableMatch = tableRegex.exec(textToCheck);
 
   if (tableMatch && tableMatch[1]) {
-    // Tam tablo bölgesi
     const markdownTable = tableMatch[1];
-
     const beforeTable = textToCheck.slice(0, tableMatch.index).trim();
     const afterTable = textToCheck.slice(tableMatch.index + markdownTable.length).trim();
-
     const tableHTML = markdownTableToHTML(markdownTable);
 
     let finalHTML = "";
     if (beforeTable) finalHTML += `<p>${beforeTable}</p>`;
     finalHTML += tableHTML;
     if (afterTable) finalHTML += `<p>${afterTable}</p>`;
-
     $(`#botMessageContent-${uniqueId}`).html(finalHTML);
   } else {
-    // Tablolu regex tutmadı
-    $(`#botMessageContent-${uniqueId}`).text(textToCheck);
+    // Metni direkt HTML olarak bas (içinde <img> varsa, gösterilsin)
+    $(`#botMessageContent-${uniqueId}`).html(textToCheck);
   }
 }
 
-/***************************************************
- * 4) Form submit -> /ask -> chunk read
- ***************************************************/
 $(document).ready(function () {
   $("#messageArea").on("submit", function (e) {
     e.preventDefault();
-
     const inputField = $("#text");
     let rawText = inputField.val().trim();
     if (!rawText) return;
@@ -100,7 +79,7 @@ $(document).ready(function () {
           ${rawText}
           <span class="msg_time_send">${currentTime}</span>
         </div>
-        <img src="https://i.ibb.co/d5b84Xw/Untitled-design.png"
+        <img src="static/images/fotograf.png"
              class="rounded-circle user_img_msg"
              alt="user image">
       </div>
@@ -145,13 +124,9 @@ $(document).ready(function () {
       function readChunk() {
         return reader.read().then(({ done, value }) => {
           if (done) {
-            // Burada "【...】" gibi şeyleri temizleyebilirsiniz
-            botMessage = botMessage.replace(/【.*?】/g, "");
-            // Tabloları dönüştür
             processBotMessage(botMessage, uniqueId);
             return;
           }
-
           const chunkText = decoder.decode(value, { stream: true });
           botMessage += chunkText;
           $("#messageFormeight").scrollTop($("#messageFormeight")[0].scrollHeight);
