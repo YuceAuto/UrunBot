@@ -40,7 +40,6 @@ def transform_text_to_markdown(input_text):
 
     return '\n'.join(transformed_lines)
 
-
 def extract_markdown_tables_from_text(text):
     """
     Verilen text içinde '|' içeren satırları bularak potansiyel Markdown tablo satırlarını döndürür.
@@ -62,10 +61,55 @@ def extract_markdown_tables_from_text(text):
 
     return tables
 
+def fix_table_characters(table_markdown: str) -> str:
+    """
+    Markdown tablo metnindeki özel karakterleri temizler/düzeltir.
+    Örnek:
+      - Hücre başı/sonundaki '**' karakterlerini kaldırmak
+      - Sayıların arasındaki '' => / dönüştürmesi
+      - Harflerin arasındaki // => ' (veya tam tersi) dönüştürmesi
+    """
+
+    fixed_lines = []
+    lines = table_markdown.split('\n')
+
+    for line in lines:
+        if '|' not in line:
+            # Tablonun ayırıcı olmayan satırıysa direkt ekle.
+            fixed_lines.append(line)
+            continue
+
+        columns = line.split('|')
+        fixed_columns = []
+        for col in columns:
+            col = col.strip()
+            
+            # 1) '**' temizle
+            col = col.replace('**', '')
+
+            # 2) Sayıların arasında '' => /
+            # Örnek: 123''456 => 123/456
+            col = re.sub(r'(\d)\'\'(\d)', r'\1/\2', col)
+
+            # 3) Harflerin arasında // => '
+            # Örnek: A//B => A'B
+            col = re.sub(r'([A-Za-z])//([A-Za-z])', r"\1'\2", col)
+
+            fixed_columns.append(col)
+
+        # Sabitlenmiş sütunları yeniden birleştir
+        fixed_line = ' | '.join(fixed_columns)
+        fixed_lines.append(fixed_line)
+
+    return '\n'.join(fixed_lines)
+
 def markdown_table_to_html(md_table_str):
     """
     Basit bir Markdown tabloyu HTML'e dönüştürür; tablo arka planı .my-blue-table ile mavi yapılır.
     """
+    # (ÖNEMLİ) Önce tablo içindeki özel karakterleri düzeltelim
+    md_table_str = fix_table_characters(md_table_str)
+
     lines = md_table_str.strip().split("\n")
     if len(lines) < 2:
         return f"<p>{md_table_str}</p>"
@@ -106,7 +150,7 @@ class ChatbotAPI:
 
         # Örnek asistan yapılandırması (keyword -> asistan ID eşlemesi)
         self.ASSISTANT_CONFIG = {
-            "asst_1qGG7y8w6QcupPETaYQRdGsI": ["Kamiq"],
+            "asst_fw6RpRp8PbNiLUR1KB2XtAkK": ["Kamiq"],
             "asst_yeDl2aiHy0uoGGjHRmr2dlYB": ["Fabia"],
             "asst_njSG1NVgg4axJFmvVYAIXrpM": ["Scala"],
         }
