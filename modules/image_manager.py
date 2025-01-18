@@ -29,7 +29,7 @@ class ImageManager:
             f for f in os.listdir(self.images_folder)
             if f.lower().endswith(valid_extensions)
         ]
-        # print(f"{len(self.image_files)} adet resim yüklendi:\n{self.image_files}")
+        print(f"{len(self.image_files)} adet resim yüklendi:\n{self.image_files}")
 
     def filter_images_multi_keywords(self, keywords_string: str):
         """

@@ -8,7 +8,6 @@ class MarkdownProcessor:
         :return: HTML formatındaki metin
         """
         lines = input_text.split('\n')
-        print(lines)
         transformed_lines = []
 
         for line in lines:
