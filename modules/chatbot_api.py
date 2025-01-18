@@ -1,13 +1,16 @@
 import os
-import time
-import logging
 import re
+import time
+import openai
+import logging
+
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from dotenv import load_dotenv
-import openai
+
 from modules.image_manager import ImageManager
 from modules.markdown_utils import MarkdownProcessor
+from modules.text_to_speech import TextToSpeech
 
 load_dotenv()
 
@@ -42,6 +45,9 @@ class ChatbotAPI:
         self.image_manager.load_images()
 
         self.markdown_processor = MarkdownProcessor()
+
+        # Initialize TTS
+        self.tts = TextToSpeech(language='tr', assets_path='assets')
 
         self._define_routes()
 
@@ -173,7 +179,21 @@ class ChatbotAPI:
                                         yield f"\n--- Tablo {i} (HTML) ---\n".encode("utf-8")
                                         yield html_table.encode("utf-8")
                                         yield b"\n"
-
+                            try:
+                                print("----------------------------------")
+                                print(content)
+                                content = str(content).replace("[TextContentBlock(text=Text(annotations=[FileCitationAnnotation(end_index=1435, file_citation=FileCitation(file_id='file-EAtMSGfx719cu18X55wHTj'), start_index=1423, text='', type='file_citation')], value='", "")
+                                content = content.replace("'), type='text')]", "")
+                                print("----------------------------------")
+                                print("REMOVED")
+                                print("----------------------------------")
+                                print(content)
+                                print("----------------------------------")
+                            except:
+                                print("NOTHING")
+                                pass
+                            # Speak the response
+                            self.tts.speak(content)
                             yield content.encode("utf-8")
                     return
 
