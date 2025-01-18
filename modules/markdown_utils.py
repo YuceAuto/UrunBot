@@ -11,6 +11,21 @@ class MarkdownProcessor:
         transformed_lines = []
         for line in lines:
             stripped_line = line.strip()
+
+            # Çift tırnak ve tek tırnak dönüşümleri
+            stripped_line = re.sub(r"(\d)''(\d)", r"\1\"\2", stripped_line)
+            stripped_line = stripped_line.replace("\\'", "'")
+
+            # ** kelime ** veya **Kelime** biçimlendirmesi için kontrol
+            stripped_line = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", stripped_line)
+            
+            # PDF referanslarının kaldırılması
+            stripped_line = re.sub(r"【.*?】", "", stripped_line).strip()
+
+            # Noktalı paragrafları biçimlendirme
+            if stripped_line.endswith(':'):
+                stripped_line += ' '
+
             if stripped_line.startswith('- **') and stripped_line.endswith(':**'):
                 heading_content = stripped_line.replace('- **', '').replace(':**', '').strip()
                 transformed_lines.append(f'### {heading_content}')
@@ -96,19 +111,3 @@ class MarkdownProcessor:
             html += '</tr>\n'
         html += '</tbody>\n</table>'
         return html
-
-# Örnek kullanım
-if __name__ == "__main__":
-    processor = MarkdownProcessor()
-
-    example_text = """- **Başlık 1:**\n- Madde 1\n- Madde 2\n| Başlık1 | Başlık2 |\n|---------|---------|\n| Veri1   | Veri2   |\n"""
-
-    markdown = processor.transform_text_to_markdown(example_text)
-    print("Markdown Formatı:\n", markdown)
-
-    tables = processor.extract_markdown_tables_from_text(example_text)
-    print("Tablolar:\n", tables)
-
-    if tables:
-        html = processor.markdown_table_to_html(tables[0])
-        print("HTML Formatındaki Tablo:\n", html)
