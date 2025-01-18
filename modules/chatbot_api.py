@@ -146,7 +146,7 @@ class ChatbotAPI:
                 assistant_id=assistant_id
             )
 
-            yield "Yanıt hazırlanıyor...\n".encode("utf-8")
+            # yield "Yanıt hazırlanıyor...\n".encode("utf-8")
 
             start_time = time.time()
             timeout = 30  # 30 saniye bekleme
@@ -160,7 +160,6 @@ class ChatbotAPI:
                         if msg.role == "assistant":
                             content = str(msg.content)
                             content = self.markdown_processor.transform_text_to_markdown(content)
-
                             # Opsiyonel tablo dönüştürme
                             pattern = r'value="([^"]+)"'
                             match = re.search(pattern, content)
@@ -237,18 +236,6 @@ class ChatbotAPI:
         except Exception as e:
             self.logger.error(f"Geri bildirim hatası: {str(e)}")
             return jsonify({"error": "Bir hata oluştu."}), 500
-
-    def run(self, debug=True):
-        self.app.run(debug=debug)
-
-    def _feedback(self):
-        try:
-            data = request.get_json()
-            self.logger.info(f"Feedback received: {data}")
-            return jsonify({"message": "Thank you for your feedback!"})
-        except Exception as e:
-            self.logger.error(f"Feedback error: {str(e)}")
-            return jsonify({"error": "An error occurred."}), 500
 
     def run(self, debug=True):
         self.app.run(debug=debug)

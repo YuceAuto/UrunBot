@@ -47,6 +47,7 @@ function processBotMessage(fullText, uniqueId) {
   // Bir tablo var mı diye regex ile bak
   const tableRegex = /(\|.*?\|\n\|.*?\|\n[\s\S]+)/;
   const tableMatch = tableRegex.exec(textToCheck);
+  // Her yeni satır karakterini HTML `<br>` ile değiştir
 
   if (tableMatch && tableMatch[1]) {
     const markdownTable = tableMatch[1];
@@ -61,8 +62,11 @@ function processBotMessage(fullText, uniqueId) {
     $(`#botMessageContent-${uniqueId}`).html(finalHTML);
   } else {
     // Metni direkt HTML olarak bas (içinde <img> varsa, gösterilsin)
-    $(`#botMessageContent-${uniqueId}`).html(textToCheck);
-  }
+    // $(`#botMessageContent-${uniqueId}`).html(textToCheck);
+    const formattedText = normalizedText.replace(/\n/g, "<br>");
+    // HTML olarak mesajı ekle
+    $(`#botMessageContent-${uniqueId}`).html(formattedText);
+    }
 }
 
 $(document).ready(function () {

@@ -5,36 +5,37 @@ class MarkdownProcessor:
         """
         Metni Markdown formatına dönüştürür.
         :param input_text: İşlenecek metin
-        :return: Markdown formatındaki metin
+        :return: HTML formatındaki metin
         """
         lines = input_text.split('\n')
+        print(lines)
         transformed_lines = []
+
         for line in lines:
             stripped_line = line.strip()
 
             # Çift tırnak ve tek tırnak dönüşümleri
-            stripped_line = re.sub(r"(\d)''(\d)", r"\1\"\2", stripped_line)
+            stripped_line = re.sub(r"(\d)''(\d)", r'\1"\2', stripped_line)
             stripped_line = stripped_line.replace("\\'", "'")
 
-            # ** kelime ** veya **Kelime** biçimlendirmesi için kontrol
+            # Bold metin
             stripped_line = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", stripped_line)
-            
-            # PDF referanslarının kaldırılması
+
+            # PDF referanslarını kaldırma
             stripped_line = re.sub(r"【.*?】", "", stripped_line).strip()
 
-            # Noktalı paragrafları biçimlendirme
-            if stripped_line.endswith(':'):
-                stripped_line += ' '
-
-            if stripped_line.startswith('- **') and stripped_line.endswith(':**'):
-                heading_content = stripped_line.replace('- **', '').replace(':**', '').strip()
-                transformed_lines.append(f'### {heading_content}')
+            # Başlıkları ve maddeleri HTML'ye uygun hale getirme
+            if stripped_line.startswith('### '):
+                transformed_lines.append(f"<b>{stripped_line[4:]}</b><br>")
             elif stripped_line.startswith('- '):
-                bullet_content = stripped_line[2:]
-                transformed_lines.append(f'- {bullet_content}')
+                transformed_lines.append(f"&bull; {stripped_line[2:]}<br>")
+            elif stripped_line.startswith('<b>') and stripped_line.endswith('</b>'):
+                transformed_lines.append(f"{stripped_line}<br>")
             else:
-                transformed_lines.append(stripped_line)
-        return '\n'.join(transformed_lines)
+                transformed_lines.append(f"{stripped_line}<br>")
+
+        return ''.join(transformed_lines)
+
 
     def extract_markdown_tables_from_text(self, text):
         """
