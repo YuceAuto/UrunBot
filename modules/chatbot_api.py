@@ -10,9 +10,11 @@ from dotenv import load_dotenv
 
 from modules.image_manager import ImageManager
 from modules.markdown_utils import MarkdownProcessor
-from modules.text_to_speech import TextToSpeech
+from modules.text_to_speech import ElevenLabsTTS
 
 load_dotenv()
+
+ASSETS_DIR = os.path.join(os.getcwd(), "assets")
 
 class ChatbotAPI:
     def __init__(self, static_folder='static', template_folder='templates'):
@@ -25,6 +27,8 @@ class ChatbotAPI:
         self.logger = self._setup_logger()
 
         openai.api_key = os.getenv("OPENAI_API_KEY")
+        elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+        elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
         self.client = openai
 
         self.ASSISTANT_CONFIG = {
@@ -45,9 +49,9 @@ class ChatbotAPI:
         self.image_manager.load_images()
 
         self.markdown_processor = MarkdownProcessor()
-
+        self.timeout = 45
         # Initialize TTS
-        self.tts = TextToSpeech(language='tr', assets_path='assets')
+        self.tts = ElevenLabsTTS(elevenlabs_api_key, elevenlabs_voice_id)
 
         self._define_routes()
 
@@ -146,11 +150,10 @@ class ChatbotAPI:
             )
 
             start_time = time.time()
-            timeout = 30  # 30 seconds timeout
 
             response_text = ""  # Collect response for TTS
 
-            while time.time() - start_time < timeout:
+            while time.time() - start_time < self.timeout:
                 run = self.client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
                 if run.status == "completed":
                     message_response = self.client.beta.threads.messages.list(thread_id=thread.id)
@@ -161,9 +164,27 @@ class ChatbotAPI:
                             content = self.markdown_processor.transform_text_to_markdown(content)
                             response_text += content
                             yield content.encode("utf-8")
-                            
-                            # Play text as it is displayed
-                            self.tts.speak(content, speed_multiplier=1.5)
+
+                            # Regex deseni
+                            pattern = r"\[TextContentBlock\(.*?value='([\s\S]*?)'\),\s*type='text'\)\]<br>"
+                            match = re.search(pattern, content)
+                            if match:
+                                # Elde edilen 'value' içeriği
+                                extracted_value = match.group(1)
+                                cleaned_value = extracted_value.replace("\\n", "").replace("\\", "").replace("<b>","").replace("</b>","")
+                                print(cleaned_value)
+                            else:
+                                print("Eşleşme bulunamadı.")
+                                pass
+                            try:
+                                file_path = os.path.join(ASSETS_DIR, "curr_text.txt")
+                                with open(file_path, "w", encoding="utf-8") as file:
+                                    file.write(cleaned_value)
+                                # Play text as it is displayed
+                                self.tts.speak(cleaned_value)
+                            except Exception as e:
+                                print(e)
+                                pass
                     return
 
                 elif run.status == "failed":
