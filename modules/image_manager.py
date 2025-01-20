@@ -31,14 +31,11 @@ class ImageManager:
         matched_files = []
         for img in self.image_files:
             img_lower = img.lower()
-            # splitted'taki her kelime img_lower'da geçiyorsa eşleşme
             if all(word in img_lower for word in splitted):
                 matched_files.append(img)
-
         return matched_files
 
     def display_images(self, image_list):
-        # Opsiyonel: test amaçlı matplotlib ile göstermek isterseniz
         for image_name in image_list:
             image_path = os.path.join(self.images_folder, image_name)
             with Image.open(image_path) as img:

@@ -11,27 +11,27 @@ class MarkdownProcessor:
             # Çift tırnak dönüştürmesi (örnek: 2''3 -> 2"3)
             stripped_line = re.sub(r"(\d)''(\d)", r'\1"\2', stripped_line)
             stripped_line = stripped_line.replace("\\'", "'")
-            # **bold** -> <b> </b>
+            # **bold** -> <b>...</b>
             stripped_line = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", stripped_line)
             # PDF referanslarını (【 】) kaldır
             stripped_line = re.sub(r"【.*?】", "", stripped_line).strip()
 
-            # 1) ### Başlıkları <b>Başlık</b>
+            # ### Başlıkları <b>Başlık</b>
             if stripped_line.startswith('### '):
                 transformed_lines.append(f"<b>{stripped_line[4:]}</b><br>")
 
-            # 2) Tek satırlık "Genel Özellikler" vb.
+            # Tek satırlık "Genel Özellikler" vb.
             elif (stripped_line
                   and not stripped_line.startswith('- ')
                   and re.match(r'^[A-Za-zÇŞĞÜÖİ0-9 ]+:?$', stripped_line)):
                 heading_text = re.sub(r':$', '', stripped_line)
                 transformed_lines.append(f"<b>{heading_text}</b><br>")
 
-            # 3) Liste maddeleri ("- ")
+            # Liste maddeleri ("- ")
             elif stripped_line.startswith('- '):
                 transformed_lines.append(f"&bull; {stripped_line[2:]}<br>")
 
-            # 4) Normal satırlar
+            # Normal satırlar
             else:
                 transformed_lines.append(f"{stripped_line}<br>")
 

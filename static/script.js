@@ -1,5 +1,4 @@
 function extractTextContentBlock(fullText) {
-  // Sadece "value" değerini yakalamak için
   const regex = /\[TextContentBlock\(.*?value=(['"])([\s\S]*?)\1.*?\)\]/;
   const match = regex.exec(fullText);
   if (match && match[2]) {
@@ -46,14 +45,10 @@ function markdownTableToHTML(mdTable) {
 }
 
 function processBotMessage(fullText, uniqueId) {
-  // API'den gelen "\\n" ifadelerini normal "\n" ile değiştiriyoruz
   const normalizedText = fullText.replace(/\\n/g, "\n");
-
-  // (Opsiyonel) Sadece "[TextContentBlock(...) ]" içeriği varsa onu al
   const extractedValue = extractTextContentBlock(normalizedText);
   const textToCheck = extractedValue ? extractedValue : normalizedText;
 
-  // Markdown tablosu var mı?
   const tableRegex = /(\|.*?\|\n\|.*?\|\n[\s\S]+)/;
   const tableMatch = tableRegex.exec(textToCheck);
 
@@ -70,7 +65,6 @@ function processBotMessage(fullText, uniqueId) {
 
     $(`#botMessageContent-${uniqueId}`).html(finalHTML);
   } else {
-    // Tablo yoksa normal metni <br> ile dönüştür
     const formattedText = textToCheck.replace(/\n/g, "<br>");
     $(`#botMessageContent-${uniqueId}`).html(formattedText);
   }
@@ -151,7 +145,7 @@ $(document).ready(function () {
         $(`#botMessageContent-${uniqueId}`).text("Bir hata oluştu: " + err.message);
       });
 
-    // 9. dakikada uyarı gösterme
+    // 9. dakikada uyarı göstermek isterseniz (örnek)
     setTimeout(() => {
       document.getElementById('notificationBar').style.display = 'block';
     }, 9 * 60 * 1000);
