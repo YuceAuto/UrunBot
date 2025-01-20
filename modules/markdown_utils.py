@@ -8,7 +8,7 @@ class MarkdownProcessor:
         for line in lines:
             stripped_line = line.strip()
 
-            # Çift tırnak dönüştürmesi (örnek: 2''3 -> 2"3)
+            # 2''3 -> 2"3
             stripped_line = re.sub(r"(\d)''(\d)", r'\1"\2', stripped_line)
             stripped_line = stripped_line.replace("\\'", "'")
             # **bold** -> <b>...</b>
@@ -16,22 +16,21 @@ class MarkdownProcessor:
             # PDF referanslarını (【 】) kaldır
             stripped_line = re.sub(r"【.*?】", "", stripped_line).strip()
 
-            # ### Başlıkları <b>Başlık</b>
+            # ### Başlık -> <b>Başlık</b>
             if stripped_line.startswith('### '):
                 transformed_lines.append(f"<b>{stripped_line[4:]}</b><br>")
 
-            # Tek satırlık "Genel Özellikler" vb.
+            # Tek satırlık başlık (ör. "Genel Özellikler:")
             elif (stripped_line
                   and not stripped_line.startswith('- ')
                   and re.match(r'^[A-Za-zÇŞĞÜÖİ0-9 ]+:?$', stripped_line)):
                 heading_text = re.sub(r':$', '', stripped_line)
                 transformed_lines.append(f"<b>{heading_text}</b><br>")
 
-            # Liste maddeleri ("- ")
+            # Liste maddesi ("- ")
             elif stripped_line.startswith('- '):
                 transformed_lines.append(f"&bull; {stripped_line[2:]}<br>")
 
-            # Normal satırlar
             else:
                 transformed_lines.append(f"{stripped_line}<br>")
 

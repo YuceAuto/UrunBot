@@ -13,30 +13,24 @@ load_dotenv()
 
 def item_matches(img_lower: str, word_list: list) -> bool:
     """
-    word_list içinde normal kelimeler (örn. "direksiyon")
-    ve '!something' şeklinde başlayan kelimeler olabilir.
-    
-    - Normal kelimeler: Dosya adında GEÇMELİ
-    - '!something': Dosya adında GEÇMEMELİ
+    word_list içindeki normal kelimeler -> Dosya adında GEÇMELİ
+    '!xyz' -> Dosya adında GEÇMEMELİ
+    Ör: ["monte","carlo","standart","döşeme","!kapı"]
     """
     must_have = []
     must_not = []
     for w in word_list:
         if w.startswith("!"):
-            must_not.append(w[1:])  # baştaki '!' işaretini at
+            must_not.append(w[1:])
         else:
             must_have.append(w)
 
-    # must_have'deki her kelime img_lower içinde olmalı
     for mh in must_have:
         if mh not in img_lower:
             return False
-
-    # must_not'taki hiçbiri img_lower içinde olmamalı
     for mn in must_not:
         if mn in img_lower:
             return False
-
     return True
 
 
@@ -54,7 +48,6 @@ class ChatbotAPI:
         openai.api_key = os.getenv("OPENAI_API_KEY")
         self.client = openai
 
-        # Kullanıcı hangi kelimeyi yazarsa hangi asistan devreye girecek?
         self.ASSISTANT_CONFIG = {
             "asst_fw6RpRp8PbNiLUR1KB2XtAkK": ["Kamiq"],
             "asst_yeDl2aiHy0uoGGjHRmr2dlYB": ["Fabia"],
@@ -119,9 +112,16 @@ class ChatbotAPI:
     def _generate_response(self, user_message, user_id):
         self.logger.info(f"Kullanıcı ({user_id}) mesajı: {user_message}")
 
-        # 1) Görsel isteği var mı?
+        # 1) Asistan seçimi (Kullanıcı "Scala", "Kamiq", "Fabia" diyorsa)
+        assistant_id = self.user_states.get(user_id)
+        for aid, keywords in self.ASSISTANT_CONFIG.items():
+            if any(keyword.lower() in user_message.lower() for keyword in keywords):
+                assistant_id = aid
+                self.user_states[user_id] = assistant_id
+                break
+
+        # 2) Görsel isteği?
         if self._is_image_request(user_message):
-            assistant_id = self.user_states.get(user_id)
             if not assistant_id:
                 yield "Henüz bir asistan seçilmediği için görsel gösteremiyorum.\n".encode("utf-8")
                 return
@@ -131,14 +131,13 @@ class ChatbotAPI:
                 yield "Asistan adını bulamadım.\n".encode("utf-8")
                 return
 
-            # Mesajdan ek keyword
+            # Ek kelimeler
             keyword = self._extract_image_keyword(user_message, assistant_name)
             if keyword:
                 full_filter = f"{assistant_name} {keyword}"
             else:
                 full_filter = assistant_name
 
-            # Kullanıcının istediği kriterlerle eşleşen görselleri bul
             found_images = self.image_manager.filter_images_multi_keywords(full_filter)
             if not found_images:
                 yield f"'{full_filter}' için uygun bir görsel bulamadım.\n".encode("utf-8")
@@ -146,9 +145,8 @@ class ChatbotAPI:
 
             lower_msg = user_message.lower()
 
-            # (YENİ) Eğer kullanıcı "tüm görselleri görmek istemiyorum" benzeri ifade kullanıyorsa
+            # (A) "Tüm görselleri istemiyorum" derse kısa liste
             if self._user_doesnt_want_all_images(lower_msg):
-                # Sadece şu öncelik listesi:
                 priority_lists = [
                     ["monte", "carlo"],
                     ["premium", "standart"],
@@ -156,57 +154,15 @@ class ChatbotAPI:
                     ["elite",   "standart"],
                     ["elite",   "opsiyonel"]
                 ]
+                sorted_images = self._sort_images_in_strict_order(found_images, priority_lists)
             else:
-                # (A) Monte Carlo -> 13’lü sıralama
-                if "monte" in lower_msg and "carlo" in lower_msg:
-                    priority_lists = [
-                        ["direksiyon", "simidi"],
-                        ["döşeme", "standart"],
-                        ["döşeme", "opsiyonel"],
-                        ["ön", "dekor", "!standart", "!opsiyonel"],
-                        ["ön", "dekor", "standart"],
-                        ["ön", "dekor", "opsiyonel"],
-                        ["ön", "konsol", "!standart", "!opsiyonel"],
-                        ["ön", "konsol", "standart"],
-                        ["ön", "konsol", "opsiyonel"],
-                        ["gösterge", "paneli"],
-                        ["multimedya"],
-                        ["jant", "standart"],
-                        ["jant", "opsiyonel"]
-                    ]
-
-                # (B) Premium / Elite -> 11 adım
-                elif ("premium" in lower_msg) or ("elite" in lower_msg):
-                    priority_lists = [
-                        ["direksiyon", "simidi"],
-                        ["döşeme", "standart"],
-                        ["döşeme", "opsiyonel"],
-                        ["ön", "dekor", "standart"],
-                        ["ön", "dekor", "opsiyonel"],
-                        ["ön", "konsol", "standart"],
-                        ["ön", "konsol", "opsiyonel"],
-                        ["gösterge", "paneli"],
-                        ["multimedya"],
-                        ["jant", "standart"],
-                        ["jant", "opsiyonel"]
-                    ]
-
-                # (C) Scala -> eski sıralama
-                elif "scala" in lower_msg:
-                    priority_lists = [
-                        ["monte", "carlo"],
-                        ["premium", "standart"],
-                        ["premium", "opsiyonel"],
-                        ["elite",   "standart"],
-                        ["elite",   "opsiyonel"]
-                    ]
+                # (B) Scala / Kamiq / Fabia -> monte carlo (8 adım), premium/elite (11 adım)
+                if assistant_name.lower() in ["scala", "kamiq", "fabia"]:
+                    sorted_images = self._multi_group_sort(found_images)
                 else:
-                    priority_lists = []
+                    sorted_images = found_images
 
-            # Sıralama fonksiyonuna gönder
-            sorted_images = self._sort_images_in_strict_order(found_images, priority_lists)
-
-            # Sonuçları sırayla dön
+            # Sonuçları dön
             for img_file in sorted_images:
                 img_url = f"/static/images/{img_file}"
                 base_name, _ = os.path.splitext(img_file)
@@ -217,19 +173,12 @@ class ChatbotAPI:
 
             return
 
-        # 2) Görsel isteği yoksa => Asistan seçimi
-        assistant_id = self.user_states.get(user_id)
-        for aid, keywords in self.ASSISTANT_CONFIG.items():
-            if any(keyword.lower() in user_message.lower() for keyword in keywords):
-                assistant_id = aid
-                self.user_states[user_id] = assistant_id
-                break
-
+        # 3) Görsel isteği yoksa => Chat akışı
         if not assistant_id:
             yield "Uygun bir asistan bulunamadı.\n".encode("utf-8")
             return
 
-        # 3) ChatGPT / OpenAI akışı (opsiyonel)
+        # 4) ChatGPT / OpenAI akışı (opsiyonel)
         try:
             thread = self.client.beta.threads.create(
                 messages=[{"role": "user", "content": user_message}]
@@ -264,17 +213,67 @@ class ChatbotAPI:
             self.logger.error(f"Yanıt oluşturma hatası: {str(e)}")
             yield f"Bir hata oluştu: {str(e)}\n".encode("utf-8")
 
+    def _multi_group_sort(self, image_list):
+        """
+        Monte Carlo => 8 adım
+        Premium/Elite => 11 adım
+        Default => en sona (boş liste)
+        """
+        # Monte Carlo (8 adım)
+        monte_carlo_8 = [
+            ["monte", "carlo", "standart", "direksiyon", "simidi"],
+            ["monte", "carlo", "standart", "döşeme", "!kapı"],
+            ["monte", "carlo", "standart", "kapı", "döşeme"],
+            ["monte", "carlo", "standart", "ön", "dekor"],
+            ["monte", "carlo", "standart", "ön", "konsol"],
+            ["monte", "carlo", "standart", "gösterge", "panel"],
+            ["monte", "carlo", "standart", "multimedya", "sistemi"],
+            ["monte", "carlo", "standart", "jant"]
+        ]
+
+        # Premium / Elite (11 adım)
+        premium_elite_11 = [
+            ["direksiyon", "simidi"],
+            ["döşeme", "standart"],
+            ["döşeme", "opsiyonel"],
+            ["ön", "dekor", "standart"],
+            ["ön", "dekor", "opsiyonel"],
+            ["ön", "konsol", "standart"],
+            ["ön", "konsol", "opsiyonel"],
+            ["gösterge", "paneli"],
+            ["multimedya"],
+            ["jant", "standart"],
+            ["jant", "opsiyonel"]
+        ]
+
+        default_list = []
+
+        # A) Gruplara ayır
+        monte_carlo_files = []
+        premium_elite_files = []
+        default_files = []
+
+        for img in image_list:
+            img_lower = img.lower()
+            if "monte carlo" in img_lower:
+                monte_carlo_files.append(img)
+            elif ("premium" in img_lower) or ("elite" in img_lower):
+                premium_elite_files.append(img)
+            else:
+                default_files.append(img)
+
+        # B) Her grubu ayrı listesiyle sırala
+        sorted_mc = self._sort_images_in_strict_order(monte_carlo_files, monte_carlo_8)
+        sorted_pe = self._sort_images_in_strict_order(premium_elite_files, premium_elite_11)
+        sorted_def = self._sort_images_in_strict_order(default_files, default_list)
+
+        # C) Birleştir (Monte Carlo -> Premium/Elite -> Default)
+        return sorted_mc + sorted_pe + sorted_def
+
     def _sort_images_in_strict_order(self, image_list, priority_lists):
         """
-        Katmanlı / kademeli sıralama.
-        priority_lists içinde örneğin:
-          ["ön", "dekor", "!standart", "!opsiyonel"] vb. olabilir.
-        
-        1) listedeki ilk dizi -> ilk kategori
-        2) listedeki ikinci dizi -> ikinci kategori
-        ...
-        
-        Bir dosya ilk eşleştiği kategoride yer alır, sonra remaining'den çıkar.
+        priority_lists içindeki satırları sırayla dener,
+        eşleşenleri oradan çıkarır. Kalanlar en sonda alfabetik eklenir.
         """
         sorted_results = []
         remaining = set(image_list)
@@ -282,8 +281,7 @@ class ChatbotAPI:
         for word_list in priority_lists:
             matched_now = []
             for img in list(remaining):
-                img_lower = img.lower()
-                if item_matches(img_lower, word_list):
+                if item_matches(img.lower(), word_list):
                     matched_now.append(img)
             if matched_now:
                 matched_now.sort()
@@ -291,7 +289,6 @@ class ChatbotAPI:
                 for m in matched_now:
                     remaining.remove(m)
 
-        # Hiçbir kategoriye girmeyenler en sona
         if remaining:
             sorted_results.extend(sorted(list(remaining)))
 
@@ -299,16 +296,14 @@ class ChatbotAPI:
 
     def _is_image_request(self, message: str):
         """
-        Kullanıcının mesajında 'resim', 'fotoğraf' veya 'görsel' geçiyorsa
-        görsel talebi var diye kabul ediyoruz.
+        'resim', 'fotoğraf' veya 'görsel' -> True
         """
-        lower_msg = message.lower()
-        return ("resim" in lower_msg) or ("fotoğraf" in lower_msg) or ("görsel" in lower_msg)
+        msg = message.lower()
+        return ("resim" in msg) or ("fotoğraf" in msg) or ("görsel" in msg)
 
     def _extract_image_keyword(self, message: str, assistant_name: str):
         """
-        Mesajdan ek kelimeler çekiyoruz. Örn:
-        'Scala Monte Carlo kırmızı görselleri istiyorum' -> 'monte_carlo kırmızı'
+        Ör: "Kamiq Monte Carlo Standart Döşeme" -> 'monte carlo standart döşeme'
         """
         lower_msg = message.lower()
         brand_lower = assistant_name.lower()
@@ -322,20 +317,14 @@ class ChatbotAPI:
         for p in common_phrases:
             cleaned = re.sub(p, "", cleaned, flags=re.IGNORECASE)
 
-        # "monte carlo" => "monte_carlo" (dosya adlarında böyle kullanıyorsanız)
-        cleaned = re.sub(r"monte\s+carlo", "monte_carlo", cleaned, flags=re.IGNORECASE)
-
         final_keyword = cleaned.strip()
         return final_keyword if final_keyword else None
 
     def _user_doesnt_want_all_images(self, msg: str) -> bool:
         """
-        Kullanıcı 'tüm görselleri görmek istemiyorum', 'tümünü istemiyorum' vb. 
-        şeklinde bir ifade kullanıyorsa True döndür.
+        'tüm görselleri istemiyorum', 'tümünü istemiyorum' vb.
         """
-        # Negatif anahtar kelimeler:
         negatives = ["istemiyorum", "istemem", "görmek istemiyorum", "görmek istemem"]
-        # "tüm", "hepsi", "tamamı" vb. kelimeler
         if any(x in msg for x in ["tüm", "hepsi", "tamamı", "tamamını"]):
             for neg in negatives:
                 if neg in msg:

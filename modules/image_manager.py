@@ -8,7 +8,7 @@ class ImageManager:
         self.images_folder = images_folder
         self.image_files = []
 
-        # Stopword listesi: Dosya adlarını filtrelerken
+        # Stopword listesi: Dosya adında yok saysın
         self.stopwords = {
             "model", "araç", "arac", "paylaşabilir", "paylaşır", "misin", "mısın",
             "lütfen", "istiyorum", "?", "görsel", "resim", "fotoğraf", "fotograf"
