@@ -18,7 +18,6 @@ class ChatbotAPI:
                          template_folder=os.path.join(os.getcwd(), template_folder))
         
         CORS(self.app)
-
         self.logger = self._setup_logger()
 
         openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -90,7 +89,6 @@ class ChatbotAPI:
 
         # 1) Görsel isteği var mı?
         if self._is_image_request(user_message):
-            # ChatGPT'ye gitmiyoruz, direkt resim bulma aşamasına geçiyoruz.
             assistant_id = self.user_states.get(user_id)
             if not assistant_id:
                 yield "Henüz bir asistan seçilmediği için görsel gösteremiyorum.\n".encode("utf-8")
@@ -102,7 +100,6 @@ class ChatbotAPI:
                 return
 
             keyword = self._extract_image_keyword(user_message, assistant_name)
-
             if keyword:
                 full_filter = f"{assistant_name} {keyword}"
             else:
@@ -111,15 +108,44 @@ class ChatbotAPI:
             found_images = self.image_manager.filter_images_multi_keywords(full_filter)
             if not found_images:
                 yield f"'{full_filter}' için uygun bir görsel bulamadım.\n".encode("utf-8")
-            else:
-                yield f"{assistant_name} asistanına ait görseller (filtre: '{keyword if keyword else 'None'}'):\n".encode("utf-8")
-                for img_file in found_images:
-                    img_url = f"/static/images/{img_file}"
-                    yield f'<img src="{img_url}" alt="{img_file}" style="max-width:300px; margin:5px;" />\n'.encode("utf-8")
+                return
+
+            # -- ÖZEL SIRALAMA --
+            # Aşağıdaki liste, istediğimiz sıralamayı tanımlar.
+            # Her eleman, dosya adında aranacak kelimelerden oluşur:
+            sort_priority = [
+                ["monte", "carlo"],      # 0: Monte Carlo
+                ["premium", "standart"], # 1: Premium Standart
+                ["premium", "opsiyonel"],# 2: Premium Opsiyonel
+                ["elite",   "standart"], # 3: Elite Standart
+                ["elite",   "opsiyonel"] # 4: Elite Opsiyonel
+            ]
+
+            def get_sort_index(img_file):
+                lower_name = img_file.lower()
+                # Her bir word_list içindeki tüm kelimeler
+                # dosya adında varsa, o index'i döndür.
+                for idx, word_list in enumerate(sort_priority):
+                    if all(word in lower_name for word in word_list):
+                        return idx
+                # Hiçbiri yoksa en sona koy
+                return len(sort_priority)
+
+            # found_images'i bu özel fonksiyonla sıralıyoruz
+            sorted_images = sorted(found_images, key=get_sort_index)
+
+            # Sıralanmış görselleri sırayla göster:
+            for img_file in sorted_images:
+                img_url = f"/static/images/{img_file}"
+                base_name, _ = os.path.splitext(img_file)
+                pretty_name = base_name.replace("_", " ")
+
+                yield f"<h4>{pretty_name}</h4>\n".encode("utf-8")
+                yield f'<img src="{img_url}" alt="{pretty_name}" style="max-width:300px; margin:5px;" />\n'.encode("utf-8")
 
             return
 
-        # 2) Görsel isteği yoksa asistan seçimi yap
+        # 2) Görsel isteği yoksa asistan seçimi
         assistant_id = self.user_states.get(user_id)
         for aid, keywords in self.ASSISTANT_CONFIG.items():
             if any(keyword.lower() in user_message.lower() for keyword in keywords):
@@ -131,7 +157,7 @@ class ChatbotAPI:
             yield "Uygun bir asistan bulunamadı.\n".encode("utf-8")
             return
 
-        # 3) ChatGPT (OpenAI) akışı
+        # 3) ChatGPT akışı
         try:
             thread = self.client.beta.threads.create(
                 messages=[{"role": "user", "content": user_message}]
@@ -142,7 +168,7 @@ class ChatbotAPI:
             )
 
             start_time = time.time()
-            timeout = 30  # 30 saniye bekleme
+            timeout = 30  # 30 saniye
 
             while time.time() - start_time < timeout:
                 run = self.client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
@@ -152,11 +178,10 @@ class ChatbotAPI:
                     for msg in message_response.data:
                         if msg.role == "assistant":
                             content = str(msg.content)
-                            # Dönüşen içeriği Markdown formatına çevirelim
+                            # Markdown dönüştürme
                             content = self.markdown_processor.transform_text_to_markdown(content)
                             yield content.encode("utf-8")
                     return
-
                 elif run.status == "failed":
                     yield "Yanıt oluşturulamadı.\n".encode("utf-8")
                     return
@@ -174,31 +199,29 @@ class ChatbotAPI:
         Kullanıcının mesajında 'resim', 'fotoğraf' veya 'görsel' kelimesi geçiyor mu?
         """
         lower_msg = message.lower()
-        if "resim" in lower_msg or "fotoğraf" in lower_msg or "görsel" in lower_msg:
-            return True
-        return False
+        return ("resim" in lower_msg) or ("fotoğraf" in lower_msg) or ("görsel" in lower_msg)
 
     def _extract_image_keyword(self, message: str, assistant_name: str):
         """
-        Mesajdan 'fabia premium kırmızı model' gibi bir filtrenin çekilmesini sağlar.
+        Mesajdan ek anahtar kelimeler çekilir (örn: 'premium kırmızı opsiyonel').
         """
         lower_msg = message.lower()
         brand_lower = assistant_name.lower()
 
         # Markayı çıkar
         cleaned = lower_msg.replace(brand_lower, "")
-
         # 'resim', 'fotoğraf', 'görsel' kelimelerini çıkar
         cleaned = re.sub(r"(resim|fotoğraf|görsel)\w*", "", cleaned, flags=re.IGNORECASE)
 
         # Yaygın ek kalıplar
         common_phrases = [
-            r"paylaşabilir\s?misin", r"paylaşır\s?mısın", r"lütfen", r"istiyorum", r"\?$"
+            r"paylaşabilir\s?misin", r"paylaşır\s?mısın",
+            r"lütfen", r"istiyorum", r"\?$"
         ]
         for p in common_phrases:
             cleaned = re.sub(p, "", cleaned, flags=re.IGNORECASE)
 
-        # "monte carlo" → "monte_carlo"
+        # "monte carlo" => "monte_carlo" (dosya adında _ var ise)
         cleaned = re.sub(r"monte\s+carlo", "monte_carlo", cleaned, flags=re.IGNORECASE)
 
         final_keyword = cleaned.strip()

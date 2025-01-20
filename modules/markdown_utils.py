@@ -8,45 +8,36 @@ class MarkdownProcessor:
         for line in lines:
             stripped_line = line.strip()
 
-            # Çift tırnak ve tek tırnak dönüşümleri
+            # Çift tırnak dönüştürmesi (örnek: 2''3 -> 2"3)
             stripped_line = re.sub(r"(\d)''(\d)", r'\1"\2', stripped_line)
             stripped_line = stripped_line.replace("\\'", "'")
-
-            # **bold** metin → <b></b>
+            # **bold** -> <b> </b>
             stripped_line = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", stripped_line)
-
-            # PDF referanslarını kaldırma (örnek: 【blabla】 → "")
+            # PDF referanslarını (【 】) kaldır
             stripped_line = re.sub(r"【.*?】", "", stripped_line).strip()
 
-            # 1) ### Başlıkları
+            # 1) ### Başlıkları <b>Başlık</b>
             if stripped_line.startswith('### '):
                 transformed_lines.append(f"<b>{stripped_line[4:]}</b><br>")
 
-            # 2) “Genel Özellikler”, “Donanım Seviyeleri” vb. satırlar
+            # 2) Tek satırlık "Genel Özellikler" vb.
             elif (stripped_line
                   and not stripped_line.startswith('- ')
                   and re.match(r'^[A-Za-zÇŞĞÜÖİ0-9 ]+:?$', stripped_line)):
-
-                # Sonu ':' ile bitiyorsa onu temizleyip <b> yapalım
                 heading_text = re.sub(r':$', '', stripped_line)
                 transformed_lines.append(f"<b>{heading_text}</b><br>")
 
-            # 3) Liste maddeleri ("- " ile başlayan satırlar)
+            # 3) Liste maddeleri ("- ")
             elif stripped_line.startswith('- '):
                 transformed_lines.append(f"&bull; {stripped_line[2:]}<br>")
 
-            # 4) Sıradan satırlar
+            # 4) Normal satırlar
             else:
                 transformed_lines.append(f"{stripped_line}<br>")
 
         return ''.join(transformed_lines)
 
     def extract_markdown_tables_from_text(self, text):
-        """
-        Metinden Markdown tablolarını çıkarır.
-        :param text: Girdi metni
-        :return: Tabloların bir listesi
-        """
         lines = text.splitlines()
         tables = []
         current_table = []
@@ -62,9 +53,6 @@ class MarkdownProcessor:
         return tables
 
     def fix_table_characters(self, table_markdown: str) -> str:
-        """
-        Markdown tablosundaki karakter hatalarını düzeltir.
-        """
         fixed_lines = []
         lines = table_markdown.split('\n')
         for line in lines:
@@ -84,9 +72,6 @@ class MarkdownProcessor:
         return '\n'.join(fixed_lines)
 
     def markdown_table_to_html(self, md_table_str):
-        """
-        Markdown tablosunu HTML formatına dönüştürür.
-        """
         md_table_str = self.fix_table_characters(md_table_str)
         lines = md_table_str.strip().split("\n")
         if len(lines) < 2:

@@ -1,5 +1,5 @@
 function extractTextContentBlock(fullText) {
-  // Sadece "value" değerini yakalamak için regex
+  // Sadece "value" değerini yakalamak için
   const regex = /\[TextContentBlock\(.*?value=(['"])([\s\S]*?)\1.*?\)\]/;
   const match = regex.exec(fullText);
   if (match && match[2]) {
@@ -49,13 +49,11 @@ function processBotMessage(fullText, uniqueId) {
   // API'den gelen "\\n" ifadelerini normal "\n" ile değiştiriyoruz
   const normalizedText = fullText.replace(/\\n/g, "\n");
 
-  // Sadece value içeriğini çekiyoruz
+  // (Opsiyonel) Sadece "[TextContentBlock(...) ]" içeriği varsa onu al
   const extractedValue = extractTextContentBlock(normalizedText);
-
-  // Eğer value bulunursa onu, bulunmazsa tüm mesajı kullan
   const textToCheck = extractedValue ? extractedValue : normalizedText;
 
-  // Markdown tablosu var mı diye kontrol
+  // Markdown tablosu var mı?
   const tableRegex = /(\|.*?\|\n\|.*?\|\n[\s\S]+)/;
   const tableMatch = tableRegex.exec(textToCheck);
 
@@ -72,7 +70,7 @@ function processBotMessage(fullText, uniqueId) {
 
     $(`#botMessageContent-${uniqueId}`).html(finalHTML);
   } else {
-    // Tablo yoksa normal metni <br> ile dönüştürerek ekle
+    // Tablo yoksa normal metni <br> ile dönüştür
     const formattedText = textToCheck.replace(/\n/g, "<br>");
     $(`#botMessageContent-${uniqueId}`).html(formattedText);
   }

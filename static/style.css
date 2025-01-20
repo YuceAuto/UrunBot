@@ -156,7 +156,7 @@ body, html {
   font-size: 10px;
 }
 
-/* TABLO MAVI ARKA PLAN (baloncuk rengi) */
+/* Tablonun baloncuk rengiyle uyumlu olması için: */
 .my-blue-table {
   background-color: rgb(82, 172, 255) !important;
   color: #000 !important;
