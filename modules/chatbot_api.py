@@ -3,6 +3,7 @@ import re
 import time
 import openai
 import logging
+import asyncio
 
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
@@ -51,7 +52,7 @@ class ChatbotAPI:
         self.markdown_processor = MarkdownProcessor()
         self.timeout = 45
         # Initialize TTS
-        self.tts = ElevenLabsTTS(elevenlabs_api_key, elevenlabs_voice_id)
+        self.tts = ElevenLabsTTS()
 
         self._define_routes()
 
@@ -141,59 +142,57 @@ class ChatbotAPI:
 
         # 3) ChatGPT (OpenAI) response streaming with TTS
         try:
-            thread = self.client.beta.threads.create(
-                messages=[{"role": "user", "content": user_message}]
-            )
-            run = self.client.beta.threads.runs.create(
-                thread_id=thread.id,
-                assistant_id=assistant_id
-            )
+            time.sleep(1.0)
+            if user_message == "kamiq özellikleri":
+                kamiq_file_path = os.path.join(ASSETS_DIR, "kamiq_özellikleri.txt")
+                tts_file_path = os.path.join(ASSETS_DIR, "kamiq_özellikleri.mp3")
+                
+                with open(kamiq_file_path, "r", encoding="utf-8") as file:
+                    content = file.read()
 
-            start_time = time.time()
+                async def async_play():
+                    self.tts.play(tts_file_path)
 
-            response_text = ""  # Collect response for TTS
+                asyncio.run(async_play())
+                
+                yield content.encode("utf-8")
 
-            while time.time() - start_time < self.timeout:
-                run = self.client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-                if run.status == "completed":
-                    message_response = self.client.beta.threads.messages.list(thread_id=thread.id)
-                    for msg in message_response.data:
-                        if msg.role == "assistant":
-                            content = str(msg.content)
-                            # Convert Markdown content
-                            content = self.markdown_processor.transform_text_to_markdown(content)
-                            response_text += content
-                            yield content.encode("utf-8")
+            else:
 
-                            # Regex deseni
-                            pattern = r"\[TextContentBlock\(.*?value='([\s\S]*?)'\),\s*type='text'\)\]<br>"
-                            match = re.search(pattern, content)
-                            if match:
-                                # Elde edilen 'value' içeriği
-                                extracted_value = match.group(1)
-                                cleaned_value = extracted_value.replace("\\n", "").replace("\\", "").replace("<b>","").replace("</b>","")
-                                print(cleaned_value)
-                            else:
-                                print("Eşleşme bulunamadı.")
-                                pass
-                            try:
-                                file_path = os.path.join(ASSETS_DIR, "curr_text.txt")
-                                with open(file_path, "w", encoding="utf-8") as file:
-                                    file.write(cleaned_value)
-                                # Play text as it is displayed
-                                self.tts.speak(cleaned_value)
-                            except Exception as e:
-                                print(e)
-                                pass
-                    return
+                thread = self.client.beta.threads.create(
+                    messages=[{"role": "user", "content": user_message}]
+                )
+                run = self.client.beta.threads.runs.create(
+                    thread_id=thread.id,
+                    assistant_id=assistant_id
+                )
 
-                elif run.status == "failed":
-                    yield "Yanıt oluşturulamadı.\n".encode("utf-8")
-                    return
+                start_time = time.time()
 
-                time.sleep(0.5)
+                response_text = ""  # Collect response for TTS
 
-            yield "Yanıt alma zaman aşımına uğradı.\n".encode("utf-8")
+                while time.time() - start_time < self.timeout:
+                    run = self.client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
+                    if run.status == "completed":
+                        message_response = self.client.beta.threads.messages.list(thread_id=thread.id)
+                        for msg in message_response.data:
+                            if msg.role == "assistant":
+                                content = str(msg.content)
+                                # Convert Markdown content
+                                content = self.markdown_processor.transform_text_to_markdown(content)
+                                response_text += content
+
+                                yield content.encode("utf-8")
+                                self.tts.speak(response_text)
+                        return
+
+                    elif run.status == "failed":
+                        yield "Yanıt oluşturulamadı.\n".encode("utf-8")
+                        return
+
+                    time.sleep(0.5)
+
+                yield "Yanıt alma zaman aşımına uğradı.\n".encode("utf-8")
 
         except Exception as e:
             self.logger.error(f"Yanıt oluşturma hatası: {str(e)}")

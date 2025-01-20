@@ -4,24 +4,30 @@ import io
 import pygame
 from dotenv import load_dotenv
 
+# Çevresel değişkenleri yükleme
 load_dotenv()
 
 class ElevenLabsTTS:
-    def __init__(self, api_key, voice_id):
+    """
+    ElevenLabs TTS sınıfı ile metni seslendirmek için bir API bağlantısı sağlar.
+    """
+    def __init__(self):
         """
-        ElevenLabs TTS sınıfı başlatılır.
+        ElevenLabs TTS sınıfını başlatır ve gerekli ayarları yapar.
+        """
+        self.api_key = os.getenv("ELEVENLABS_API_KEY")
+        self.voice_id = os.getenv("ELEVENLABS_VOICE_ID")
+        self.url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}"
 
-        :param api_key: ElevenLabs API anahtarı
-        :param voice_id: Kullanılacak ses kimliği (varsayılan: "21m00Tcm4TlvDq8ikWAM")
-        """
-        self.api_key = api_key
-        self.voice_id = "x5J0w1JGs0MQNyzjoYDc"
-        self.url = f"https://api.elevenlabs.io/v1/text-to-speech/x5J0w1JGs0MQNyzjoYDc"
-        pygame.mixer.init()  # Pygame ses sistemi başlatılır
+        # Pygame ses sistemi başlatılır
+        pygame.mixer.init()
 
-    def speak(self, text, stability=0.5, similarity_boost=0.8):
+        if not self.api_key or not self.voice_id:
+            raise ValueError("API anahtarı veya ses kimliği eksik. Lütfen .env dosyasını kontrol edin.")
+
+    def speak(self, text, stability=0.6, similarity_boost=0.92):
         """
-        ElevenLabs API ile metni sesli olarak oynatır.
+        Metni seslendiren bir fonksiyon.
 
         :param text: Seslendirilmek istenen metin
         :param stability: Sesin stabilitesi (0.0 - 1.0 arası)
@@ -35,14 +41,16 @@ class ElevenLabsTTS:
 
         data = {
             "text": text,
+            "model_id": "eleven_turbo_v2_5",
             "voice_settings": {
                 "stability": stability,
                 "similarity_boost": similarity_boost,
             },
         }
-        print(data)
+
         try:
             response = requests.post(self.url, json=data, headers=headers)
+            
             if response.status_code == 200:
                 # Ses verisini bellekte işleme
                 audio_stream = io.BytesIO(response.content)
@@ -53,20 +61,50 @@ class ElevenLabsTTS:
                 while pygame.mixer.music.get_busy():
                     pygame.time.Clock().tick(10)
             else:
-                print(f"API Hatası: {response.status_code}, {response.text}")
+                print(f"API Hatası: {response.status_code}, {response.json().get('error', 'Bilinmeyen hata')}")
 
+        except requests.exceptions.RequestException as req_err:
+            print(f"HTTP Hatası: {req_err}")
         except Exception as e:
-            print(f"Hata: {e}")
+            print(f"Beklenmeyen bir hata oluştu: {e}")
+
+    def play(self, file_path):
+        """
+        Yerel bir MP3 dosyasını çalmak için bir fonksiyon.
+
+        :param file_path: Çalınacak MP3 dosyasının yolu
+        """
+        try:
+            if not os.path.isfile(file_path):
+                raise FileNotFoundError(f"Dosya bulunamadı: {file_path}")
+
+            pygame.mixer.music.load(file_path)
+            pygame.mixer.music.play()
+
+            # Ses bitene kadar bekle
+            while pygame.mixer.music.get_busy():
+                pygame.time.Clock().tick(10)
+
+        except FileNotFoundError as fnf_error:
+            print(fnf_error)
+        except Exception as e:
+            print(f"Beklenmeyen bir hata oluştu: {e}")
 
 # Örnek kullanım
 if __name__ == "__main__":
-    # .env dosyasındaki API anahtarını al
-    API_KEY = os.getenv("ELEVENLABS_API_KEY")
-    tts = ElevenLabsTTS(api_key=API_KEY)
+    try:
+        # ElevenLabs TTS sınıfını başlat
+        tts = ElevenLabsTTS()
 
-    # Metni seslendirme
-    tts.speak(
-        text="Merhaba, bu ElevenLabs tarafından seslendiriliyor.",
-        stability=0.7,
-        similarity_boost=0.9,
-    )
+        # Metni seslendirme
+        tts.speak(
+            text="Merhaba, bu ElevenLabs tarafından seslendiriliyor.",
+            stability=0.3,
+            similarity_boost=1.0,
+        )
+
+        # Yerel MP3 dosyasını çalma
+        tts.play("example.mp3")
+
+    except Exception as e:
+        print(f"Program hatası: {e}")
