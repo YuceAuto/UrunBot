@@ -29,7 +29,6 @@ class ImageManager:
             f for f in os.listdir(self.images_folder)
             if f.lower().endswith(valid_extensions)
         ]
-        print(f"{len(self.image_files)} adet resim yüklendi:\n{self.image_files}")
 
     def filter_images_multi_keywords(self, keywords_string: str):
         """
@@ -41,6 +40,7 @@ class ImageManager:
         matched_files = []
         for img in self.image_files:
             img_lower = img.lower()
+            # Tüm splitted kelimeleri dosya adında arıyoruz
             if all(word in img_lower for word in splitted):
                 matched_files.append(img)
 

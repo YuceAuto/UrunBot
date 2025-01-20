@@ -107,18 +107,13 @@ class ChatbotAPI:
                 yield "Asistan adını bulamadım.\n".encode("utf-8")
                 return
 
-            # Kullanıcının mesajındaki anahtar kelimeleri yakalamak
             keyword = self._extract_image_keyword(user_message, assistant_name)
-            # keyword örn: "kırmızı model" => "kırmızı"
 
             if keyword:
-                # "Fabia premium kırmızı" vb.
                 full_filter = f"{assistant_name} {keyword}"
             else:
-                # Belki sadece "Fabia görsel" demiş olabilir
                 full_filter = assistant_name
 
-            # >>> Çoklu kelime arama fonksiyonu <<<
             found_images = self.image_manager.filter_images_multi_keywords(full_filter)
             if not found_images:
                 yield f"'{full_filter}' için uygun bir görsel bulamadım.\n".encode("utf-8")
@@ -152,8 +147,6 @@ class ChatbotAPI:
                 assistant_id=assistant_id
             )
 
-            # yield "Yanıt hazırlanıyor...\n".encode("utf-8")
-
             start_time = time.time()
             timeout = 30  # 30 saniye bekleme
 
@@ -165,35 +158,8 @@ class ChatbotAPI:
                     for msg in message_response.data:
                         if msg.role == "assistant":
                             content = str(msg.content)
+                            # Dönüşen içeriği Markdown formatına çevirelim
                             content = self.markdown_processor.transform_text_to_markdown(content)
-                            # Opsiyonel tablo dönüştürme
-                            pattern = r'value="([^"]+)"'
-                            match = re.search(pattern, content)
-                            if match:
-                                extracted_text = match.group(1).replace("\\n", "\n")
-                                tables = self.markdown_processor.extract_markdown_tables_from_text(extracted_text)
-                                if tables:
-                                    self.logger.info(f"Bulunan tablolar: {tables}")
-                                    for i, tbl in enumerate(tables, 1):
-                                        html_table = self.markdown_processor.markdown_table_to_html(tbl)
-                                        yield f"\n--- Tablo {i} (HTML) ---\n".encode("utf-8")
-                                        yield html_table.encode("utf-8")
-                                        yield b"\n"
-                            try:
-                                print("----------------------------------")
-                                print(content)
-                                content = str(content).replace("[TextContentBlock(text=Text(annotations=[FileCitationAnnotation(end_index=1435, file_citation=FileCitation(file_id='file-EAtMSGfx719cu18X55wHTj'), start_index=1423, text='', type='file_citation')], value='", "")
-                                content = content.replace("'), type='text')]", "")
-                                print("----------------------------------")
-                                print("REMOVED")
-                                print("----------------------------------")
-                                print(content)
-                                print("----------------------------------")
-                            except:
-                                print("NOTHING")
-                                pass
-                            # Speak the response
-                            self.tts.speak(content)
                             yield content.encode("utf-8")
                     return
 
@@ -221,10 +187,6 @@ class ChatbotAPI:
     def _extract_image_keyword(self, message: str, assistant_name: str):
         """
         Mesajdan 'fabia premium kırmızı model' gibi bir filtrenin çekilmesini sağlar.
-        - Markayı (assistant_name) cümleden çıkartıyoruz
-        - 'resim', 'fotoğraf', 'görsel' kelimelerini çıkarıyoruz (isterseniz stopwords'te de tutabilirsiniz)
-        - 'paylaşabilir misin', 'lütfen' vb. kalıpları temizliyoruz
-        - 'monte carlo' ifadesini 'monte_carlo' şeklinde dönüştürüyoruz
         """
         lower_msg = message.lower()
         brand_lower = assistant_name.lower()
@@ -232,7 +194,7 @@ class ChatbotAPI:
         # Markayı çıkar
         cleaned = lower_msg.replace(brand_lower, "")
 
-        # Örnek: 'resim', 'fotoğraf', 'görsel' vb. kelimeleri çıkar
+        # 'resim', 'fotoğraf', 'görsel' kelimelerini çıkar
         cleaned = re.sub(r"(resim|fotoğraf|görsel)\w*", "", cleaned, flags=re.IGNORECASE)
 
         # Yaygın ek kalıplar
@@ -242,7 +204,7 @@ class ChatbotAPI:
         for p in common_phrases:
             cleaned = re.sub(p, "", cleaned, flags=re.IGNORECASE)
 
-        # "monte carlo" → "monte_carlo" (dosya adlarında monte_carlo şeklindeyse)
+        # "monte carlo" → "monte_carlo"
         cleaned = re.sub(r"monte\s+carlo", "monte_carlo", cleaned, flags=re.IGNORECASE)
 
         final_keyword = cleaned.strip()
