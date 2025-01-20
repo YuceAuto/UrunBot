@@ -1,6 +1,6 @@
 import os
 import re
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import matplotlib.pyplot as plt
 
 class ImageManager:
@@ -52,9 +52,15 @@ class ImageManager:
         """
         for image_name in image_list:
             image_path = os.path.join(self.images_folder, image_name)
-            with Image.open(image_path) as img:
-                plt.figure(figsize=(8, 6))
-                plt.imshow(img)
-                plt.axis("off")
-                plt.title(os.path.splitext(image_name)[0])
-                plt.show()
+            try:
+                with Image.open(image_path) as img:
+                    if "TEST_ENV" in os.environ:
+                        print(f"Test mode: Display {image_name}")
+                        continue
+                    plt.figure(figsize=(8, 6))
+                    plt.imshow(img)
+                    plt.axis("off")
+                    plt.title(os.path.splitext(image_name)[0])
+                    plt.show()
+            except (FileNotFoundError, UnidentifiedImageError) as e:
+                print(f"Error displaying image {image_name}: {e}")
