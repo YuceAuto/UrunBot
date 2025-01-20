@@ -4,6 +4,7 @@ import tempfile
 import random
 import pygame
 
+ASSETS_DIR = os.path.join(os.getcwd(), "assets")
 
 class TextToSpeech:
     def __init__(self, language='tr', assets_path='assets'):
@@ -17,45 +18,48 @@ class TextToSpeech:
         self.assets_path = assets_path
         pygame.mixer.init()  # pygame ses sistemi başlatılır
 
-    def speak(self, text, speed_multiplier=1.5):
+    def speak(self, file_path=ASSETS_DIR+"curr_text.txt", speed_multiplier=1.5):
         """
-        Verilen metni sesli olarak okur ve hızlandırır.
+        Reads text from a file and plays it as speech with an adjustable speed.
 
-        :param text: Okunacak metin
-        :param speed_multiplier: Ses hızlandırma faktörü (varsayılan 1.25)
+        :param file_path: Path to the text file to read from
+        :param speed_multiplier: Speed multiplier for the speech (default 1.5)
         """
-        if not text.strip():
-            print("Uyarı: Okunacak metin boş.")
+        if not os.path.exists(file_path):
+            print(f"Error: The file '{file_path}' does not exist.")
             return
 
         try:
+            # Read the file's content
+            with open(file_path, "r", encoding="utf-8") as file:
+                text = file.read().strip()
+
+            if not text:
+                print("Warning: The file is empty.")
+                return
+
+            # Generate speech
             tts = gTTS(text=text, lang=self.language, slow=False)
 
-            # Geçici dosya oluştur
+            # Save to a temporary audio file
             with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_audio:
                 temp_file_path = temp_audio.name
                 tts.save(temp_file_path)
 
-            # pygame kullanarak ses oynatma
+            # Play the audio
             pygame.mixer.music.load(temp_file_path)
             pygame.mixer.music.play()
 
-            # Hızlandırma için pygame mixer frekansı ayarlanır
-            sound = pygame.mixer.Sound(temp_file_path)
-            original_frequency = sound.get_length()
-            new_frequency = original_frequency / speed_multiplier
-            sound.set_length(new_frequency)
-            sound.play()
-
-            # Ses çalma bitene kadar bekle
+            # Wait until playback finishes
             while pygame.mixer.music.get_busy():
                 pygame.time.Clock().tick(10)
 
-            # Geçici dosyayı temizle
+            # Clean up the temporary file
             if os.path.exists(temp_file_path):
                 os.unlink(temp_file_path)
+
         except Exception as e:
-            print(f"Hata: Metin okunurken bir sorun oluştu. {e}")
+            print(f"Error: An issue occurred while reading or playing the text. {e}")
 
     def play_random_fixed_text(self):
         """

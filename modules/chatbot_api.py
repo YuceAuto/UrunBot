@@ -96,7 +96,6 @@ class ChatbotAPI:
 
         # 1) Görsel isteği var mı?
         if self._is_image_request(user_message):
-            # ChatGPT'ye gitmiyoruz, direkt resim bulma aşamasına geçiyoruz.
             assistant_id = self.user_states.get(user_id)
             if not assistant_id:
                 yield "Henüz bir asistan seçilmediği için görsel gösteremiyorum.\n".encode("utf-8")
@@ -122,7 +121,6 @@ class ChatbotAPI:
                 for img_file in found_images:
                     img_url = f"/static/images/{img_file}"
                     yield f'<img src="{img_url}" alt="{img_file}" style="max-width:300px; margin:5px;" />\n'.encode("utf-8")
-
             return
 
         # 2) Görsel isteği yoksa asistan seçimi yap
@@ -137,7 +135,7 @@ class ChatbotAPI:
             yield "Uygun bir asistan bulunamadı.\n".encode("utf-8")
             return
 
-        # 3) ChatGPT (OpenAI) akışı
+        # 3) ChatGPT (OpenAI) response streaming with TTS
         try:
             thread = self.client.beta.threads.create(
                 messages=[{"role": "user", "content": user_message}]
@@ -148,19 +146,24 @@ class ChatbotAPI:
             )
 
             start_time = time.time()
-            timeout = 30  # 30 saniye bekleme
+            timeout = 30  # 30 seconds timeout
+
+            response_text = ""  # Collect response for TTS
 
             while time.time() - start_time < timeout:
                 run = self.client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
                 if run.status == "completed":
-                    # Asistan cevabı hazır
                     message_response = self.client.beta.threads.messages.list(thread_id=thread.id)
                     for msg in message_response.data:
                         if msg.role == "assistant":
                             content = str(msg.content)
-                            # Dönüşen içeriği Markdown formatına çevirelim
+                            # Convert Markdown content
                             content = self.markdown_processor.transform_text_to_markdown(content)
+                            response_text += content
                             yield content.encode("utf-8")
+                            
+                            # Play text as it is displayed
+                            self.tts.speak(content, speed_multiplier=1.5)
                     return
 
                 elif run.status == "failed":

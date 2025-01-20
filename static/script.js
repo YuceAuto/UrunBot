@@ -1,11 +1,32 @@
 function extractTextContentBlock(fullText) {
   // Sadece "value" değerini yakalamak için regex
   const regex = /\[TextContentBlock\(.*?value=(['"])([\s\S]*?)\1.*?\)\]/;
-  const match = regex.exec(fullText);
+  const match = regex.exec('assets/curr_text.txt', fullText);
+  console.log(`Dosya yolu yazıldı`);
+
+  saveToFile('/assets/curr_text.txt', fullText);
   if (match && match[2]) {
     return match[2];
   }
   return null;
+}
+
+function saveToFile(fileName, content) {
+  // Gerekli modülleri fonksiyon içinde çağır
+  const fs = require('fs');
+  const path = require('path');
+
+  // Dosya yolu oluştur
+  const filePath = path.join(__dirname, fileName);
+  console.log(`Dosya yolu yazıldı: ${filePath}`);
+
+  // İçeriği dosyaya yaz (varsa üzerine yazar)
+  try {
+    fs.writeFileSync(filePath, content, 'utf8');
+    console.log(`Dosya başarıyla yazıldı: ${filePath}`);
+  } catch (error) {
+    console.error(`Dosyaya yazılırken bir hata oluştu: ${error.message}`);
+  }
 }
 
 function markdownTableToHTML(mdTable) {
