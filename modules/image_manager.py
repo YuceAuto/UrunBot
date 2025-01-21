@@ -8,10 +8,10 @@ class ImageManager:
         self.images_folder = images_folder
         self.image_files = []
 
-        # Stopword listesi: Dosya adında yok saysın
         self.stopwords = {
-            "model", "araç", "arac", "paylaşabilir", "paylaşır", "misin", "mısın",
-            "lütfen", "istiyorum", "?", "görsel", "resim", "fotoğraf", "fotograf"
+            "model", "araç", "arac", "paylaşabilir", "paylaşır",
+            "misin", "mısın", "lütfen", "istiyorum", "?",
+            "görsel", "resim", "fotoğraf", "fotograf"
         }
 
     def load_images(self):

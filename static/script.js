@@ -145,7 +145,7 @@ $(document).ready(function () {
         $(`#botMessageContent-${uniqueId}`).text("Bir hata oluştu: " + err.message);
       });
 
-    // 9. dakikada uyarı (örnek)
+    // 9. dakika uyarı
     setTimeout(() => {
       document.getElementById('notificationBar').style.display = 'block';
     }, 9 * 60 * 1000);

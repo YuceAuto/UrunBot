@@ -13,24 +13,22 @@ class MarkdownProcessor:
             stripped_line = stripped_line.replace("\\'", "'")
             # **bold** -> <b>...</b>
             stripped_line = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", stripped_line)
-            # PDF referanslarını (【 】) kaldır
+            # PDF referanslarını kaldır
             stripped_line = re.sub(r"【.*?】", "", stripped_line).strip()
 
             # ### Başlık -> <b>Başlık</b>
             if stripped_line.startswith('### '):
                 transformed_lines.append(f"<b>{stripped_line[4:]}</b><br>")
 
-            # Tek satırlık başlık (ör. "Genel Özellikler:")
+            # Tek satırlık başlık
             elif (stripped_line
                   and not stripped_line.startswith('- ')
                   and re.match(r'^[A-Za-zÇŞĞÜÖİ0-9 ]+:?$', stripped_line)):
                 heading_text = re.sub(r':$', '', stripped_line)
                 transformed_lines.append(f"<b>{heading_text}</b><br>")
 
-            # Liste maddesi ("- ")
             elif stripped_line.startswith('- '):
                 transformed_lines.append(f"&bull; {stripped_line[2:]}<br>")
-
             else:
                 transformed_lines.append(f"{stripped_line}<br>")
 
