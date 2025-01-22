@@ -68,7 +68,6 @@ class MarkdownProcessor:
 
             # Bold metin
             stripped_line = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", stripped_line)
-
             # Başlıklar ve liste öğelerini HTML'ye dönüştürme
             if stripped_line.startswith('### '):
                 transformed_lines.append(f"<h3>{stripped_line[4:]}</h3>")
@@ -81,28 +80,20 @@ class MarkdownProcessor:
         return ''.join(transformed_lines)
 
     def extract_markdown_tables_from_text(self, text):
-        # Normalize line breaks
-        text = text.replace("\r", "\n").replace("\\n", "\n")
-        
-        # Debugging: Print the processed text
-        print(f"Processed text: {repr(text)}")
-
         lines = text.splitlines()
+        print(lines)
         tables = []
         current_table = []
-
         for line in lines:
-            if '|' in line.strip():  # Detect table rows
+            if '|' in line.strip():
                 current_table.append(line)
-            else:  # Empty line or non-table line
-                if current_table:  # If a table is in progress
+            else:
+                if current_table:
                     tables.append('\n'.join(current_table))
-                    current_table = []  # Reset for the next table
-        
-        # Add the last table (if present)
+                    current_table = []
         if current_table:
             tables.append('\n'.join(current_table))
-        
+        print(tables)
         return tables
 
     def fix_table_characters(self, table_markdown: str) -> str:

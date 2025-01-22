@@ -48,7 +48,7 @@ class ChatbotAPI:
         images_path = os.path.join(static_folder, "images")
         self.image_manager = ImageManager(images_folder=images_path)
         self.image_manager.load_images()
-
+        self.greeting = 0
         self.markdown_processor = MarkdownProcessor()
         self.timeout = 45
         # Initialize TTS
