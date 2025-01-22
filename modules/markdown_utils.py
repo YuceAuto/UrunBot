@@ -81,18 +81,28 @@ class MarkdownProcessor:
         return ''.join(transformed_lines)
 
     def extract_markdown_tables_from_text(self, text):
+        # Normalize line breaks
+        text = text.replace("\r", "\n").replace("\\n", "\n")
+        
+        # Debugging: Print the processed text
+        print(f"Processed text: {repr(text)}")
+
         lines = text.splitlines()
         tables = []
         current_table = []
+
         for line in lines:
-            if '|' in line.strip():
+            if '|' in line.strip():  # Detect table rows
                 current_table.append(line)
-            else:
-                if current_table:
+            else:  # Empty line or non-table line
+                if current_table:  # If a table is in progress
                     tables.append('\n'.join(current_table))
-                    current_table = []
+                    current_table = []  # Reset for the next table
+        
+        # Add the last table (if present)
         if current_table:
             tables.append('\n'.join(current_table))
+        
         return tables
 
     def fix_table_characters(self, table_markdown: str) -> str:
@@ -140,3 +150,9 @@ class MarkdownProcessor:
             html += '</tr>\n'
         html += '</tbody>\n</table>'
         return html
+    
+if __name__ == "__main__":
+    md = MarkdownProcessor()
+    text = "Column1|Column2|Column3\n---|---|---\nValue1|Value2|Value3"
+    result = md.extract_markdown_tables_from_text(text)
+    print(result)

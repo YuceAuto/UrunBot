@@ -94,8 +94,8 @@ class ChatbotAPI:
             return jsonify({"response": "Please enter a question."})
 
         response_generator = self._generate_response(user_message, user_id)
-        response_content = ''.join(response_generator)  # Generator'ü stringe dönüştür
-        return self.app.response_class(response_content, mimetype="text/plain")
+        return self.app.response_class(response_generator, mimetype="text/plain")
+
 
     def _generate_response(self, user_message, user_id):
         self.logger.info(f"Processing message from User ({user_id}): '{user_message}'")
