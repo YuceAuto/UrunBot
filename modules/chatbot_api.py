@@ -4,14 +4,16 @@ import time
 import openai
 import logging
 import asyncio
+import threading
 
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from dotenv import load_dotenv
+from difflib import SequenceMatcher
 
 from modules.image_manager import ImageManager
 from modules.markdown_utils import MarkdownProcessor
-from modules.text_to_speech import ElevenLabsTTS
+from modules.tts import ElevenLabsTTS
 
 load_dotenv()
 
@@ -28,10 +30,8 @@ class ChatbotAPI:
         self.logger = self._setup_logger()
 
         openai.api_key = os.getenv("OPENAI_API_KEY")
-        elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
-        elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID")
         self.client = openai
-
+        self.speech = ""
         self.ASSISTANT_CONFIG = {
             "asst_fw6RpRp8PbNiLUR1KB2XtAkK": ["Kamiq"],
             "asst_yeDl2aiHy0uoGGjHRmr2dlYB": ["Fabia"],
@@ -94,109 +94,96 @@ class ChatbotAPI:
             return jsonify({"response": "Please enter a question."})
 
         response_generator = self._generate_response(user_message, user_id)
-        return self.app.response_class(response_generator, mimetype="text/plain")
+        response_content = ''.join(response_generator)  # Generator'ü stringe dönüştür
+        return self.app.response_class(response_content, mimetype="text/plain")
 
     def _generate_response(self, user_message, user_id):
-        self.logger.info(f"Kullanıcı ({user_id}) mesajı: {user_message}")
+        self.logger.info(f"Processing message from User ({user_id}): '{user_message}'")
+        time.sleep(1.0)
+        predefined_wait_response = ("answers\\cevabınız_hazırlanıyor.txt", "sounds\\cevabınız_hazırlanıyor.mp3")
+        yield from self._auto_response(*predefined_wait_response)
+        yield "\n\n"
+        time.sleep(2.0)
 
-        # 1) Görsel isteği var mı?
         if self._is_image_request(user_message):
-            assistant_id = self.user_states.get(user_id)
-            if not assistant_id:
-                yield "Henüz bir asistan seçilmediği için görsel gösteremiyorum.\n".encode("utf-8")
-                return
-
-            assistant_name = self.ASSISTANT_NAME_MAP.get(assistant_id, "")
-            if not assistant_name:
-                yield "Asistan adını bulamadım.\n".encode("utf-8")
-                return
-
-            keyword = self._extract_image_keyword(user_message, assistant_name)
-
-            if keyword:
-                full_filter = f"{assistant_name} {keyword}"
-            else:
-                full_filter = assistant_name
-
-            found_images = self.image_manager.filter_images_multi_keywords(full_filter)
-            if not found_images:
-                yield f"'{full_filter}' için uygun bir görsel bulamadım.\n".encode("utf-8")
-            else:
-                yield f"{assistant_name} asistanına ait görseller (filtre: '{keyword if keyword else 'None'}'):\n".encode("utf-8")
-                for img_file in found_images:
-                    img_url = f"/static/images/{img_file}"
-                    yield f'<img src="{img_url}" alt="{img_file}" style="max-width:300px; margin:5px;" />\n'.encode("utf-8")
+            yield from self._handle_image_request(user_message, user_id)
             return
 
-        # 2) Görsel isteği yoksa asistan seçimi yap
-        assistant_id = self.user_states.get(user_id)
-        for aid, keywords in self.ASSISTANT_CONFIG.items():
-            if any(keyword.lower() in user_message.lower() for keyword in keywords):
-                assistant_id = aid
-                self.user_states[user_id] = assistant_id
-                break
-
+        assistant_id = self.user_states.get(user_id) or self._select_assistant(user_message)
         if not assistant_id:
-            yield "Uygun bir asistan bulunamadı.\n".encode("utf-8")
+            yield "No suitable assistant found.\n".encode("utf-8")
             return
 
-        # 3) ChatGPT (OpenAI) response streaming with TTS
+        self.user_states[user_id] = assistant_id
+
+
+        # 3) Handle predefined responses
+        predefined_responses = {
+            "kamiq özellikleri": ("answers\\kamiq_özellikleri.txt", "sounds\\kamiq_özellikleri.mp3"),
+            "scala özellikleri": ("answers\\scala_özellikleri.txt", "sounds\\scala_özellikleri.mp3"),
+            "fabia özellikleri": ("answers\\fabia_özellikleri.txt", "sounds\\fabia_özellikleri.mp3"),
+            "yüce auto genel": ("answers\\yüceauto_genel.txt", "sounds\\yüceauto_genel.mp3"),
+            "kamiq genel": ("answers\\kamiq_genel.txt", "sounds\\kamiq_genel.mp3"),
+            "scala genel": ("answers\\scala_genel.txt", "sounds\\scala_genel.mp3"),
+            "fabia genel": ("answers\\fabia_genel.txt", "sounds\\fabia_genel.mp3"),
+            "ortak avantajlar": ("answers\\ortak_avantajlar.txt", "sounds\\ortak_avantajlar.mp3"),
+            "merhaba": ("answers\\greeting.txt", "sounds\\greeting.mp3"),
+        }
+
+        # Find the best match based on similarity
+        best_match = None
+        highest_similarity = 0.0
+        for key in predefined_responses.keys():
+            similarity = SequenceMatcher(None, user_message, key).ratio()
+            if similarity > highest_similarity:
+                highest_similarity = similarity
+                best_match = key
+        print(best_match, highest_similarity)
+        # If similarity is above 80%, select the best match
+        if best_match and highest_similarity >= 0.55:
+            path1, path2 = predefined_responses[best_match]
+            print(path1, path2, "-------------------------------")
+            yield from self._auto_response(path1, path2)
+            return
+
+        # 4) ChatGPT (OpenAI) response streaming
         try:
-            time.sleep(1.0)
-            if user_message == "kamiq özellikleri":
-                kamiq_file_path = os.path.join(ASSETS_DIR, "kamiq_özellikleri.txt")
-                tts_file_path = os.path.join(ASSETS_DIR, "kamiq_özellikleri.mp3")
-                
-                with open(kamiq_file_path, "r", encoding="utf-8") as file:
-                    content = file.read()
+            thread = self.client.beta.threads.create(messages=[{"role": "user", "content": user_message}])
+            run = self.client.beta.threads.runs.create(thread_id=thread.id, assistant_id=assistant_id)
+            start_time = time.time()
 
-                async def async_play():
-                    self.tts.play(tts_file_path)
+            while time.time() - start_time < self.timeout:
+                run = self.client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
+                if run.status == "completed":
+                    message_response = self.client.beta.threads.messages.list(thread_id=thread.id)
+                    for msg in message_response.data:
+                        if msg.role == "assistant":
+                            content = str(msg.content)
+                            content = self.markdown_processor.transform_text_to_markdown(content)
 
-                asyncio.run(async_play())
-                
-                yield content.encode("utf-8")
+                            # Optional table extraction
+                            tables = self.markdown_processor.extract_markdown_tables_from_text(content)
+                            if tables:
+                                self.logger.info(f"Found tables: {tables}")
+                                for i, tbl in enumerate(tables, 1):
+                                    html_table = self.markdown_processor.markdown_table_to_html(tbl)
+                                    yield f"\n--- Table {i} (HTML) ---\n".encode("utf-8")
+                                    yield html_table.encode("utf-8")
+                                    yield b"\n"
+                            yield content.encode("utf-8")
+                    return
 
-            else:
+                elif run.status == "failed":
+                    yield "Failed to generate a response.\n".encode("utf-8")
+                    return
 
-                thread = self.client.beta.threads.create(
-                    messages=[{"role": "user", "content": user_message}]
-                )
-                run = self.client.beta.threads.runs.create(
-                    thread_id=thread.id,
-                    assistant_id=assistant_id
-                )
+                time.sleep(0.5)
 
-                start_time = time.time()
-
-                response_text = ""  # Collect response for TTS
-
-                while time.time() - start_time < self.timeout:
-                    run = self.client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-                    if run.status == "completed":
-                        message_response = self.client.beta.threads.messages.list(thread_id=thread.id)
-                        for msg in message_response.data:
-                            if msg.role == "assistant":
-                                content = str(msg.content)
-                                # Convert Markdown content
-                                content = self.markdown_processor.transform_text_to_markdown(content)
-                                response_text += content
-
-                                yield content.encode("utf-8")
-                                self.tts.speak(response_text)
-                        return
-
-                    elif run.status == "failed":
-                        yield "Yanıt oluşturulamadı.\n".encode("utf-8")
-                        return
-
-                    time.sleep(0.5)
-
-                yield "Yanıt alma zaman aşımına uğradı.\n".encode("utf-8")
+            yield "Response timeout exceeded.\n".encode("utf-8")
 
         except Exception as e:
-            self.logger.error(f"Yanıt oluşturma hatası: {str(e)}")
-            yield f"Bir hata oluştu: {str(e)}\n".encode("utf-8")
+            self.logger.error(f"Error generating response: {str(e)}")
+            yield f"An error occurred: {str(e)}\n".encode("utf-8")
 
     def _is_image_request(self, message: str):
         """
@@ -207,40 +194,60 @@ class ChatbotAPI:
             return True
         return False
 
-    def _extract_image_keyword(self, message: str, assistant_name: str):
-        """
-        Mesajdan 'fabia premium kırmızı model' gibi bir filtrenin çekilmesini sağlar.
-        """
-        lower_msg = message.lower()
-        brand_lower = assistant_name.lower()
+    def _handle_image_request(self, message, user_id):
+        assistant_id = self.user_states.get(user_id)
+        if not assistant_id:
+            yield "No assistant selected to display images.\n".encode("utf-8")
+            return
 
-        # Markayı çıkar
-        cleaned = lower_msg.replace(brand_lower, "")
+        assistant_name = self.ASSISTANT_NAME_MAP.get(assistant_id, "")
+        keyword = self._extract_image_keyword(message, assistant_name)
+        filter_key = f"{assistant_name} {keyword}" if keyword else assistant_name
 
-        # 'resim', 'fotoğraf', 'görsel' kelimelerini çıkar
-        cleaned = re.sub(r"(resim|fotoğraf|görsel)\w*", "", cleaned, flags=re.IGNORECASE)
+        found_images = self.image_manager.filter_images_multi_keywords(filter_key)
+        if not found_images:
+            yield f"No images found for '{filter_key}'.\n".encode("utf-8")
+        else:
+            yield f"Images for {assistant_name} (filter: '{keyword if keyword else 'None'}'):\n".encode("utf-8")
+            for img in found_images:
+                yield f'<img src="/static/images/{img}" alt="{img}" style="max-width:300px; margin:5px;" />\n'.encode("utf-8")
 
-        # Yaygın ek kalıplar
-        common_phrases = [
-            r"paylaşabilir\s?misin", r"paylaşır\s?mısın", r"lütfen", r"istiyorum", r"\?$"
-        ]
-        for p in common_phrases:
-            cleaned = re.sub(p, "", cleaned, flags=re.IGNORECASE)
+    def _select_assistant(self, message):
+        for aid, keywords in self.ASSISTANT_CONFIG.items():
+            if any(keyword.lower() in message.lower() for keyword in keywords):
+                return aid
+        return None
 
-        # "monte carlo" → "monte_carlo"
-        cleaned = re.sub(r"monte\s+carlo", "monte_carlo", cleaned, flags=re.IGNORECASE)
+    def _auto_response(self, path1, path2):
+        text_file_path = os.path.join(ASSETS_DIR, path1)
+        tts_file_path = os.path.join(ASSETS_DIR, path2)
 
-        final_keyword = cleaned.strip()
-        return final_keyword if final_keyword else None
+        # 1. Yazılı cevabı döndür
+        with open(text_file_path, "r", encoding="utf-8") as file:
+            content = file.read()
 
-    def _feedback(self):
+        # 2. Sesli cevabı oynat
+        if not self.tts:
+            yield content.encode("utf-8")  # Yazılı cevabı hemen döndür
+            self.logger.error("TTS instance is not initialized.")
+            yield "TTS system is unavailable at the moment.\n".encode("utf-8")
+            return
+
         try:
-            data = request.get_json()
-            self.logger.info(f"Geri bildirim alındı: {data}")
-            return jsonify({"message": "Geri bildiriminiz için teşekkür ederiz!"})
+            # Ses oynatma için async işlev
+            async def play_audio():
+                await self.tts.play(tts_file_path)
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)  # Yeni thread'e bir loop ata
+            yield content.encode("utf-8")  # Yazılı cevabı hemen döndür
+            new_loop.run_until_complete(play_audio())
         except Exception as e:
-            self.logger.error(f"Geri bildirim hatası: {str(e)}")
-            return jsonify({"error": "Bir hata oluştu."}), 500
+            self.logger.error(f"Audio playback error: {e}")
+            yield f"Audio playback failed: {e}\n".encode("utf-8")
+        finally:
+            new_loop.close()  # İşlem bitince loop'u güvenli bir şekilde kapat
+            return
+
 
     def run(self, debug=True):
         self.app.run(debug=debug)

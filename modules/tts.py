@@ -2,6 +2,7 @@ import os
 import requests
 import io
 import pygame
+from mutagen.mp3 import MP3
 from dotenv import load_dotenv
 
 # Çevresel değişkenleri yükleme
@@ -68,7 +69,7 @@ class ElevenLabsTTS:
         except Exception as e:
             print(f"Beklenmeyen bir hata oluştu: {e}")
 
-    def play(self, file_path):
+    async def play(self, file_path):
         """
         Yerel bir MP3 dosyasını çalmak için bir fonksiyon.
 
@@ -90,6 +91,25 @@ class ElevenLabsTTS:
         except Exception as e:
             print(f"Beklenmeyen bir hata oluştu: {e}")
 
+    def get_duration(self, file_path):
+        """
+        MP3 dosyasının süresini döndüren bir fonksiyon.
+
+        :param file_path: Süresi ölçülecek MP3 dosyasının yolu
+        :return: MP3 dosyasının süresi (saniye cinsinden float)
+        """
+        try:
+            if not os.path.isfile(file_path):
+                raise FileNotFoundError(f"Dosya bulunamadı: {file_path}")
+
+            audio = MP3(file_path)
+            return audio.info.length  # Süreyi saniye cinsinden döndürür
+        except FileNotFoundError as fnf_error:
+            print(fnf_error)
+        except Exception as e:
+            print(f"MP3 süresi alınırken hata oluştu: {e}")
+            return None
+
 # Örnek kullanım
 if __name__ == "__main__":
     try:
@@ -105,6 +125,10 @@ if __name__ == "__main__":
 
         # Yerel MP3 dosyasını çalma
         tts.play("example.mp3")
+
+        # Yerel MP3 dosyasının süresini alma
+        duration = tts.get_duration("example.mp3")
+        print(f"Ses dosyası süresi: {duration:.2f} saniye")
 
     except Exception as e:
         print(f"Program hatası: {e}")

@@ -1,6 +1,6 @@
 Skoda Kamiq, şehir içi ve şehir dışı kullanıma uygun, pratik ve modern bir SUV modelidir. Öne çıkan genel özellikleri şunlardır:
 
-Genel Özellikler
+**Genel Özellikler**
 - Boyutlar: Kompakt tasarımıyla şehir içinde kolay manevra sağlar. Uzunluğu 4.241 mm, genişliği 1.793 mm ve yüksekliği 1.562 mm'dir.
 - Bagaj Hacmi: 400 litre bagaj kapasitesine sahiptir ve arka koltuklar yatırıldığında bu kapasite 1.395 litreye kadar çıkabilir.
 - Motor Seçenekleri:
@@ -10,12 +10,12 @@ Genel Özellikler
 - Yakıt Tüketimi: WLTP standartlarına göre birleşik yakıt tüketimi 5.6 - 6.1 litre/100 km aralığındadır.
 - Güvenlik: Standart olarak şerit takip sistemi, ön bölge frenleme asistanı, çoklu çarpışma freni ve sürücü yorgunluk tespit sistemi gibi ileri seviye güvenlik özellikleri sunulmaktadır.
 
-Donanım Seviyeleri
+**Donanım Seviyeleri**
 - Elite: Temel güvenlik ve konfor özelliklerini içerir. Bi-LED ön farlar, manuel klima ve 8" dijital gösterge paneli gibi standart donanımlara sahiptir.
 - Premium: Çift bölgeli otomatik klima, geri görüş kamerası, kablosuz şarj ünitesi ve 10.25" dijital gösterge paneli gibi daha ileri özelliklerle donatılmıştır.
 - Monte Carlo: Spor tasarım detayları ve en üst düzey donanımları sunar. Full LED Matrix ön farlar, spor direksiyon simidi ve panoramik cam tavan gibi özellikleri içerir.
 
-Konfor ve Teknoloji
+**Konfor ve Teknoloji**
 - Kablosuz SmartLink (Apple CarPlay ve Android Auto) ile mobil cihazlar kolayca bağlanabilir.
 - 8.25" dokunmatik multimedya sistemi tüm donanımlarda standarttır.
 - İleri teknolojiler arasında elektrikli bagaj kapağı, otomatik park pilotu ve çeşitli sürüş modları bulunur.

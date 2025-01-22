@@ -1,5 +1,4 @@
 function extractTextContentBlock(fullText) {
-  // Sadece "value" değerini yakalamak için regex
   const regex = /\[TextContentBlock\(.*?value=(['"])([\s\S]*?)\1.*?\)\]/;
   const match = regex.exec(fullText);
   if (match && match[2]) {
@@ -18,14 +17,11 @@ function markdownTableToHTML(mdTable) {
   const headerCells = headerLine.split("|").map(cell => cell.trim()).filter(Boolean);
   const bodyLines = lines.slice(2);
 
-  let html = `<table class="table table-bordered table-sm my-blue-table">
-<thead><tr>`;
+  let html = `<table class="table table-bordered table-sm my-blue-table">\n<thead><tr>`;
   headerCells.forEach(cell => {
     html += `<th>${cell}</th>`;
   });
-  html += `</tr></thead>
-<tbody>
-`;
+  html += `</tr></thead>\n<tbody>\n`;
 
   bodyLines.forEach(line => {
     if (!line.trim()) return;
@@ -36,28 +32,22 @@ function markdownTableToHTML(mdTable) {
     cols.forEach(col => {
       html += `<td>${col}</td>`;
     });
-    html += `</tr>
-`;
+    html += `</tr>\n`;
   });
 
-  html += `</tbody>
-</table>`;
+  html += `</tbody>\n</table>`;
   return html;
 }
 
 function processBotMessage(fullText, uniqueId) {
-  // API'den gelen "\\n" ifadelerini normal "\n" ile değiştiriyoruz
   const normalizedText = fullText.replace(/\\n/g, "\n");
-
-  // Sadece value içeriğini çekiyoruz
   const extractedValue = extractTextContentBlock(normalizedText);
+  const textToCheck = extractedValue || normalizedText;
 
-  // Eğer value bulunursa onu, bulunmazsa tüm mesajı kullan
-  const textToCheck = extractedValue ? extractedValue : normalizedText;
-
-  // Markdown tablosu var mı diye kontrol
+  // Bir tablo var mı diye regex ile bak
   const tableRegex = /(\|.*?\|\n\|.*?\|\n[\s\S]+)/;
   const tableMatch = tableRegex.exec(textToCheck);
+  // Her yeni satır karakterini HTML `<br>` ile değiştir
 
   if (tableMatch && tableMatch[1]) {
     const markdownTable = tableMatch[1];
@@ -69,13 +59,14 @@ function processBotMessage(fullText, uniqueId) {
     if (beforeTable) finalHTML += `<p>${beforeTable}</p>`;
     finalHTML += tableHTML;
     if (afterTable) finalHTML += `<p>${afterTable}</p>`;
-
     $(`#botMessageContent-${uniqueId}`).html(finalHTML);
   } else {
-    // Tablo yoksa normal metni <br> ile dönüştürerek ekle
-    const formattedText = textToCheck.replace(/\n/g, "<br>");
+    // Metni direkt HTML olarak bas (içinde <img> varsa, gösterilsin)
+    // $(`#botMessageContent-${uniqueId}`).html(textToCheck);
+    const formattedText = normalizedText.replace(/\n/g, "<br>");
+    // HTML olarak mesajı ekle
     $(`#botMessageContent-${uniqueId}`).html(formattedText);
-  }
+    }
 }
 
 $(document).ready(function () {
@@ -123,39 +114,39 @@ $(document).ready(function () {
         user_id: "default_user"
       })
     })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error("Sunucu hatası: " + response.status);
-        }
-        return response.body;
-      })
-      .then(stream => {
-        const reader = stream.getReader();
-        const decoder = new TextDecoder("utf-8");
-        let botMessage = "";
+    .then(response => {
+      if (!response.ok) {
+        throw new Error("Sunucu hatası: " + response.status);
+      }
+      return response.body;
+    })
+    .then(stream => {
+      const reader = stream.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let botMessage = "";
 
-        function readChunk() {
-          return reader.read().then(({ done, value }) => {
-            if (done) {
-              processBotMessage(botMessage, uniqueId);
-              return;
-            }
-            const chunkText = decoder.decode(value, { stream: true });
-            botMessage += chunkText;
-            $("#messageFormeight").scrollTop($("#messageFormeight")[0].scrollHeight);
-            return readChunk();
-          });
-        }
-        return readChunk();
-      })
-      .catch(err => {
-        console.error("Hata:", err);
-        $(`#botMessageContent-${uniqueId}`).text("Bir hata oluştu: " + err.message);
-      });
-
-    // 9. dakikada uyarı gösterme
-    setTimeout(() => {
-      document.getElementById('notificationBar').style.display = 'block';
-    }, 9 * 60 * 1000);
+      function readChunk() {
+        return reader.read().then(({ done, value }) => {
+          if (done) {
+            processBotMessage(botMessage, uniqueId);
+            return;
+          }
+          const chunkText = decoder.decode(value, { stream: true });
+          botMessage += chunkText;
+          $("#messageFormeight").scrollTop($("#messageFormeight")[0].scrollHeight);
+          return readChunk();
+        });
+      }
+      return readChunk();
+    })
+    .catch(err => {
+      console.error("Hata:", err);
+      $(`#botMessageContent-${uniqueId}`).text("Bir hata oluştu: " + err.message);
+    });
   });
+
+  // 9. dakikada uyarı gösterme
+  setTimeout(() => {
+    document.getElementById('notificationBar').style.display = 'block';
+  }, 9 * 60 * 1000);
 });
