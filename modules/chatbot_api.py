@@ -1,3 +1,6 @@
+# ----------------------------------------------------
+# chatbot_api.py
+# ----------------------------------------------------
 import os
 import time
 import logging
@@ -11,9 +14,8 @@ from modules.markdown_utils import MarkdownProcessor
 
 load_dotenv()
 
-# ---------------------------
-# A) Monte Carlo 12
-# ---------------------------
+# ---------------------------------------------------------
+# A) Monte Carlo listesi (12 adım)
 monte_carlo_12 = [
     ["monte", "carlo", "direksiyon", "simidi"],
     ["monte", "carlo", "döşeme", "standart"],
@@ -25,15 +27,11 @@ monte_carlo_12 = [
     ["monte", "carlo", "gösterge", "paneli"],
     ["monte", "carlo", "multimedya"],
     ["monte", "carlo", "jant", "standart"],
-    # 11) Opsiyonel PJF jant
     ["monte", "carlo", "opsiyonel", "pjf", "jant"],
-    # 12) Normal opsiyonel jant
     ["monte", "carlo", "jant", "opsiyonel"]
 ]
 
-# ---------------------------
-# B) Premium/Elite 12
-# ---------------------------
+# B) Premium/Elite listesi (12 adım)
 premium_elite_12 = [
     ["direksiyon", "simidi"],
     ["döşeme", "standart"],
@@ -46,13 +44,12 @@ premium_elite_12 = [
     ["multimedya"],
     ["jant", "standart"],
     ["jant", "opsiyonel"],
-    # 12) => Premium ve Monte Carlo PJF jant
     ["premium", "ve", "monte", "carlo", "opsiyonel", "pjf", "jant"]
 ]
 
-# ---------------------------
-# C) Fabia / Scala / Kamiq 12
-# ---------------------------
+# ---------------------------------------------------------
+# C) Fabia / Scala / Kamiq için 12'li örnek listeler
+# ---------------------------------------------------------
 fabia_12 = [
     ["fabia", "direksiyon", "simidi"],
     ["fabia", "döşeme", "standart"],
@@ -98,7 +95,6 @@ kamiq_12 = [
     ["kamiq", "opsiyonel", "pjf", "jant"]
 ]
 
-
 class ChatbotAPI:
     def __init__(self, static_folder='static', template_folder='templates'):
         self.app = Flask(
@@ -113,7 +109,7 @@ class ChatbotAPI:
         openai.api_key = os.getenv("OPENAI_API_KEY")
         self.client = openai
 
-        # Örnek asistan konfig (Kamiq / Fabia / Scala)
+        # Asistan konfigürasyonu (model isimleri)
         self.ASSISTANT_CONFIG = {
             "asst_fw6RpRp8PbNiLUR1KB2XtAkK": ["Kamiq"],
             "asst_yeDl2aiHy0uoGGjHRmr2dlYB": ["Fabia"],
@@ -157,6 +153,271 @@ class ChatbotAPI:
         def feedback():
             return self._feedback()
 
+    # ----------------------------------------------------
+    # 1) Scala özel sıralama fonksiyonu
+    # ----------------------------------------------------
+    def _custom_scala_sort(self, image_list):
+        """
+        "Scala görsel" sorusu geldiğinde,
+        kullanıcı tarafından talep edilen özel sırayı uygulamak için
+        özel bir sıralama fonksiyonu.
+        """
+        custom_order = [
+            ["scala", "monte", "carlo", "standart", "direksiyon", "simidi"],  # 1
+            ["scala", "premium", "standart", "direksiyon", "simidi"],        # 2
+            ["scala", "elite", "standart", "direksiyon", "simidi"],          # 3
+            ["scala", "monte", "carlo", "standart", "döşeme"],               # 4
+            ["scala", "monte", "carlo", "standart", "kapı", "döşeme"],       # 5
+            ["scala", "premium", "lodge", "standart", "döşeme"],             # 6
+            ["scala", "premium", "lodge", "standart", "kapı", "döşeme"],     # 7
+            ["scala", "premium", "suite", "opsiyonel", "döşeme"],            # 8
+            ["scala", "premium", "suite", "opsiyonel", "kapı", "döşeme"],    # 9
+            ["scala", "elite", "studio", "standart", "döşeme"],              # 10
+            ["scala", "elite", "studio", "standart", "kapı", "döşeme"],      # 11
+            ["scala", "monte", "carlo", "standart", "ön", "dekor"],          # 12
+            ["scala", "premium", "lodge", "standart", "ön", "dekor"],        # 13
+            ["scala", "premium", "suite", "opsiyonel", "ön", "dekor"],       # 14
+            ["scala", "elite", "studio", "standart", "ön", "dekor"],         # 15
+            ["scala", "monte", "carlo", "standart", "ön", "konsol"],         # 16
+            ["scala", "premium", "lodge", "standart", "ön", "konsol"],       # 17
+            ["scala", "premium", "suite", "opsiyonel", "ön", "konsol"],      # 18
+            ["scala", "elite", "studio", "standart", "ön", "konsol"],        # 19
+            ["scala", "monte", "carlo", "standart", "dijital", "gösterge", "paneli"], # 20
+            ["scala", "premium", "standart", "gösterge", "paneli"],          # 21
+            ["scala", "elite", "standart", "gösterge", "paneli"],            # 22
+            ["scala", "monte", "carlo", "standart", "multimedya", "sistemi"],# 23
+            ["scala", "premium", "standart", "multimedya", "sistemi"],       # 24
+            ["scala", "elite", "standart", "multimedya", "sistemi"],         # 25
+            ["scala", "monte", "carlo", "pji", "standart", "jant"],          # 26
+            ["scala", "premium", "pj5", "standart", "jant"],                 # 27
+            ["scala", "1.0", "premium", "pj7", "opsiyonel", "jant"],         # 28
+            ["scala", "premium", "pjg", "opsiyonel", "jant"],                # 29
+            ["scala", "premium", "pjn", "opsiyonel", "jant"],                # 30
+            ["scala", "premium", "pjp", "opsiyonel", "jant"],                # 31
+            ["scala", "elite", "pj5", "standart", "jant"],                   # 32
+            ["scala", "elite", "pj7", "opsiyonel", "jant"],                  # 33
+            ["scala", "elite", "pjg", "opsiyonel", "jant"],                  # 34
+            ["scala", "elite", "pjp", "opsiyonel", "jant"],                  # 35
+            ["scala", "ay", "beyazı"],                                       # 36
+            ["scala", "gümüş"],                                             # 37
+            ["scala", "çelik", "gri"],                                       # 38
+            ["scala", "grafit", "gri"],                                      # 39
+            ["scala", "büyülü", "siyah"],                                    # 40
+            ["scala", "kadife", "kırmızısı"],                                # 41
+            ["scala", "yarış", "mavisi"]                                     # 42
+        ]
+
+        def order_key(item):
+            item_lower = item.lower()
+            for index, keywords in enumerate(custom_order):
+                if all(keyword in item_lower for keyword in keywords):
+                    return index
+            return len(custom_order)
+
+        return sorted(image_list, key=order_key)
+
+    # ----------------------------------------------------
+    # 2) Kamiq özel sıralama fonksiyonu (YENİ EKLENEN)
+    # ----------------------------------------------------
+    def _custom_kamiq_sort(self, image_list):
+        """
+        "Kamiq görsel" sorusu geldiğinde,
+        kullanıcı tarafından talep edilen özel sırayı uygulamak için
+        özel bir sıralama fonksiyonu.
+        """
+
+        # İstediğiniz tam sıra:
+        custom_order = [
+            ["kamiq", "monte", "carlo", "standart", "direksiyon", "simidi"],  # 1
+            ["kamiq", "premium", "standart", "direksiyon", "simidi"],        # 2
+            ["kamiq", "elite", "standart", "direksiyon", "simidi"],          # 3
+            ["kamiq", "monte", "carlo", "standart", "döşeme"],               # 4
+            ["kamiq", "monte", "carlo", "standart", "kapı", "döşeme"],       # 5
+            ["kamiq", "premium", "lodge", "standart", "döşeme"],             # 6
+            ["kamiq", "premium", "lodge", "standart", "kapı", "döşeme"],     # 7
+            ["kamiq", "premium", "suite", "opsiyonel", "döşeme"],            # 8
+            ["kamiq", "premium", "suite", "opsiyonel", "kapı", "döşeme"],    # 9
+            ["kamiq", "elite", "studio", "standart", "döşeme"],              # 10
+            ["kamiq", "elite", "studio", "standart", "kapı", "döşeme"],      # 11
+            ["kamiq", "monte", "carlo", "standart", "ön", "dekor"],          # 12
+            ["kamiq", "premium", "lodge", "standart", "ön", "dekor"],        # 13
+            ["kamiq", "premium", "suite", "opsiyonel", "ön", "dekor"],       # 14
+            ["kamiq", "elite", "studio", "standart", "ön", "dekor"],         # 15
+            ["kamiq", "monte", "carlo", "standart", "ön", "konsol"],         # 16
+            ["kamiq", "premium", "lodge", "standart", "ön", "konsol"],       # 17
+            ["kamiq", "premium", "suite", "opsiyonel", "ön", "konsol"],      # 18
+            ["kamiq", "elite", "studio", "standart", "ön", "konsol"],        # 19
+            ["kamiq", "monte", "carlo", "standart", "dijital", "gösterge", "paneli"], # 20
+            ["kamiq", "premium", "standart", "gösterge", "paneli"],          # 21
+            ["kamiq", "elite", "standart", "gösterge", "paneli"],            # 22
+            ["kamiq", "monte", "carlo", "standart", "multimedya", "sistemi"],# 23
+            ["kamiq", "premium", "standart", "multimedya", "sistemi"],       # 24
+            ["kamiq", "elite", "standart", "multimedya", "sistemi"],         # 25
+            ["kamiq", "monte", "carlo", "pji", "standart", "jant"],          # 26
+            ["kamiq", "premium", "pjg", "standart", "jant"],                 # 27
+            ["kamiq", "1.0", "premium", "pj7", "opsiyonel", "jant"],         # 28
+            ["kamiq", "premium", "pjg", "opsiyonel", "jant"],                # 29
+            ["kamiq", "premium", "pjn", "opsiyonel", "jant"],                # 30
+            ["kamiq", "premium", "pjp", "opsiyonel", "jant"],                # 31
+            ["kamiq", "elite", "p02", "standart", "jant"],                   # 32
+            ["kamiq", "1.0", "elite", "pj7", "opsiyonel", "jant"],           # 33
+            ["kamiq", "elite", "pjg", "opsiyonel", "jant"],                  # 34
+            ["kamiq", "elite", "pjp", "opsiyonel", "jant"],                  # 35
+            ["kamiq", "ay", "beyazı"],                                       # 36
+            ["kamiq", "gümüş"],                                             # 37
+            ["kamiq", "graptihe", "gri"],                                    # 38
+            ["kamiq", "büyülü", "siyah"],                                    # 39
+            ["kamiq", "kadife", "kırmızısı"],                                # 40
+            ["kamiq", "yarış", "mavisi"],                                    # 41
+            ["kamiq", "phoenix", "turuncu"]                                  # 42
+        ]
+
+        def order_key(item):
+            item_lower = item.lower()
+            for index, keywords in enumerate(custom_order):
+                if all(keyword in item_lower for keyword in keywords):
+                    return index
+            return len(custom_order)
+
+        return sorted(image_list, key=order_key)
+
+    # -------------------------------------------------------
+    # Öncelik fonksiyonları (12 adım)
+    # -------------------------------------------------------
+    def get_priority_for_mc(self, filename: str) -> int:
+        lower_f = filename.lower()
+        for index, pattern_keywords in enumerate(monte_carlo_12):
+            if all(k in lower_f for k in pattern_keywords):
+                return index
+        return 999
+
+    def get_priority_for_prem_elite(self, filename: str) -> int:
+        lower_f = filename.lower()
+        for index, pattern_keywords in enumerate(premium_elite_12):
+            if all(k in lower_f for k in pattern_keywords):
+                return index
+        return 999
+
+    def get_priority_for_fabia_12(self, filename: str) -> int:
+        lower_f = filename.lower()
+        for index, pattern_keywords in enumerate(fabia_12):
+            if all(k in lower_f for k in pattern_keywords):
+                return index
+        return 999
+
+    def get_priority_for_scala_12(self, filename: str) -> int:
+        lower_f = filename.lower()
+        for index, pattern_keywords in enumerate(scala_12):
+            if all(k in lower_f for k in pattern_keywords):
+                return index
+        return 999
+
+    def get_priority_for_kamiq_12(self, filename: str) -> int:
+        lower_f = filename.lower()
+        for index, pattern_keywords in enumerate(kamiq_12):
+            if all(k in lower_f for k in pattern_keywords):
+                return index
+        return 999
+
+    # -------------------------------------------------------
+    # 7 AŞAMALI VARSAYILAN SIRALAMA
+    # -------------------------------------------------------
+    def _default_7step_sort(self, image_list):
+        def is_monte_carlo_standard(name):
+            return ("monte" in name and "carlo" in name and "opsiyonel" not in name)
+        def is_monte_carlo_optional(name):
+            return ("monte" in name and "carlo" in name and "opsiyonel" in name)
+        def is_premium_standard(name):
+            return ("premium" in name and "opsiyonel" not in name)
+        def is_premium_optional(name):
+            return ("premium" in name and "opsiyonel" in name)
+        def is_elite_standard(name):
+            return ("elite" in name and "opsiyonel" not in name)
+        def is_elite_optional(name):
+            return ("elite" in name and "opsiyonel" in name)
+
+        monte_carlo_std = []
+        monte_carlo_opt = []
+        premium_std = []
+        premium_opt = []
+        elite_std = []
+        elite_opt = []
+        leftover = []
+
+        for img in image_list:
+            lower_name = img.lower()
+            if is_monte_carlo_standard(lower_name):
+                monte_carlo_std.append(img)
+            elif is_monte_carlo_optional(lower_name):
+                monte_carlo_opt.append(img)
+            elif is_premium_standard(lower_name):
+                premium_std.append(img)
+            elif is_premium_optional(lower_name):
+                premium_opt.append(img)
+            elif is_elite_standard(lower_name):
+                elite_std.append(img)
+            elif is_elite_optional(lower_name):
+                elite_opt.append(img)
+            else:
+                leftover.append(img)
+
+        # Gruplar içinde alfabetik
+        monte_carlo_std.sort()
+        monte_carlo_opt.sort()
+        premium_std.sort()
+        premium_opt.sort()
+        elite_std.sort()
+        elite_opt.sort()
+        leftover.sort()
+
+        return (
+            monte_carlo_std
+            + monte_carlo_opt
+            + premium_std
+            + premium_opt
+            + elite_std
+            + elite_opt
+            + leftover
+        )
+
+    # -------------------------------------------------------
+    # TEK BİR FONKSİYONDA SIRALAMA YÖNETİMİ
+    # -------------------------------------------------------
+    def _multi_group_sort(self, image_list, desired_group=None):
+        """
+        desired_group şunları alabilir:
+          "monte_carlo"
+          "premium_elite"
+          "fabia_12"
+          "scala_12"
+          "kamiq_12"
+          "scala_custom" -> özel sıralama
+          "kamiq_custom" -> yeni eklediğimiz özel sıralama
+          None -> 7 aşamalı default
+        """
+        if desired_group == "scala_custom":
+            return self._custom_scala_sort(image_list)
+        elif desired_group == "kamiq_custom":  # <-- YENİ EKLENDİ
+            return self._custom_kamiq_sort(image_list)
+        elif desired_group == "monte_carlo":
+            image_list.sort(key=self.get_priority_for_mc)
+            return image_list
+        elif desired_group == "premium_elite":
+            image_list.sort(key=self.get_priority_for_prem_elite)
+            return image_list
+        elif desired_group == "fabia_12":
+            image_list.sort(key=self.get_priority_for_fabia_12)
+            return image_list
+        elif desired_group == "scala_12":
+            image_list.sort(key=self.get_priority_for_scala_12)
+            return image_list
+        elif desired_group == "kamiq_12":
+            image_list.sort(key=self.get_priority_for_kamiq_12)
+            return image_list
+        else:
+            # None => 7 aşamalı default
+            return self._default_7step_sort(image_list)
+
     def _ask(self):
         try:
             data = request.get_json()
@@ -175,141 +436,10 @@ class ChatbotAPI:
         response_generator = self._generate_response(user_message, user_id)
         return self.app.response_class(response_generator, mimetype="text/plain")
 
-    # -------------- PRIORITY FUNCS (12 ADET + leftover) ---------------
-    def get_priority_for_mc(self, filename: str) -> int:
-        lower_f = filename.lower()
-        for index, pattern_keywords in enumerate(monte_carlo_12):
-            if all(k in lower_f for k in pattern_keywords):
-                return index
-        # leftover => premium(200), elite(300), else(999)
-        if "premium" in lower_f:
-            return 200
-        if "elite" in lower_f:
-            return 300
-        return 999
-
-    def get_priority_for_prem_elite(self, filename: str) -> int:
-        lower_f = filename.lower()
-        for index, pattern_keywords in enumerate(premium_elite_12):
-            if all(k in lower_f for k in pattern_keywords):
-                return index
-        # leftover => MonteCarlo(200?), vs. ama siz isterseniz ekleyebilirsiniz.
-        return 999
-
-    def get_priority_for_fabia_12(self, filename: str) -> int:
-        lower_f = filename.lower()
-        # 1) fabia_12 eşleşmesi
-        for index, pattern_keywords in enumerate(fabia_12):
-            if all(k in lower_f for k in pattern_keywords):
-                return index
-        # 2) Eşleşmeyen leftover => premium(200) < elite(300) < others(999)
-        if "premium" in lower_f:
-            return 200
-        if "elite" in lower_f:
-            return 300
-        return 999
-
-    def get_priority_for_scala_12(self, filename: str) -> int:
-        lower_f = filename.lower()
-        for index, pattern_keywords in enumerate(scala_12):
-            if all(k in lower_f for k in pattern_keywords):
-                return index
-        if "premium" in lower_f:
-            return 200
-        if "elite" in lower_f:
-            return 300
-        return 999
-
-    def get_priority_for_kamiq_12(self, filename: str) -> int:
-        lower_f = filename.lower()
-        for index, pattern_keywords in enumerate(kamiq_12):
-            if all(k in lower_f for k in pattern_keywords):
-                return index
-        if "premium" in lower_f:
-            return 200
-        if "elite" in lower_f:
-            return 300
-        return 999
-
-    # --------------- 7 AŞAMALI default ---------------
-    def _default_7step_sort(self, image_list):
-        def is_monte_carlo_standard(name):
-            return ("monte" in name and "carlo" in name and "opsiyonel" not in name)
-        def is_monte_carlo_optional(name):
-            return ("monte" in name and "carlo" in name and "opsiyonel" in name)
-        def is_premium_standard(name):
-            return ("premium" in name and "opsiyonel" not in name)
-        def is_premium_optional(name):
-            return ("premium" in name and "opsiyonel" in name)
-        def is_elite_standard(name):
-            return ("elite" in name and "opsiyonel" not in name)
-        def is_elite_optional(name):
-            return ("elite" in name and "opsiyonel" in name)
-
-        mc_std, mc_opt = [], []
-        p_std, p_opt = [], []
-        e_std, e_opt = [], []
-        leftover = []
-
-        for img in image_list:
-            lower_name = img.lower()
-            if is_monte_carlo_standard(lower_name):
-                mc_std.append(img)
-            elif is_monte_carlo_optional(lower_name):
-                mc_opt.append(img)
-            elif is_premium_standard(lower_name):
-                p_std.append(img)
-            elif is_premium_optional(lower_name):
-                p_opt.append(img)
-            elif is_elite_standard(lower_name):
-                e_std.append(img)
-            elif is_elite_optional(lower_name):
-                e_opt.append(img)
-            else:
-                leftover.append(img)
-
-        mc_std.sort()
-        mc_opt.sort()
-        p_std.sort()
-        p_opt.sort()
-        e_std.sort()
-        e_opt.sort()
-        leftover.sort()
-
-        return mc_std + mc_opt + p_std + p_opt + e_std + e_opt + leftover
-
-    # --------------- ANA SIRALAMA ---------------
-    def _multi_group_sort(self, image_list, desired_group=None):
-        """
-        desired_group = "monte_carlo"     => get_priority_for_mc
-                        "premium_elite"   => get_priority_for_prem_elite
-                        "fabia_12"        => get_priority_for_fabia_12
-                        "scala_12"        => get_priority_for_scala_12
-                        "kamiq_12"        => get_priority_for_kamiq_12
-                        None veya başka   => 7 aşamalı default
-        """
-        if desired_group == "monte_carlo":
-            image_list.sort(key=self.get_priority_for_mc)
-            return image_list
-        elif desired_group == "premium_elite":
-            image_list.sort(key=self.get_priority_for_prem_elite)
-            return image_list
-        elif desired_group == "fabia_12":
-            image_list.sort(key=self.get_priority_for_fabia_12)
-            return image_list
-        elif desired_group == "scala_12":
-            image_list.sort(key=self.get_priority_for_scala_12)
-            return image_list
-        elif desired_group == "kamiq_12":
-            image_list.sort(key=self.get_priority_for_kamiq_12)
-            return image_list
-        else:
-            return self._default_7step_sort(image_list)
-
     def _generate_response(self, user_message, user_id):
         self.logger.info(f"Kullanıcı ({user_id}) mesajı: {user_message}")
 
-        # 1) Asistan seçimi
+        # 1) Asistan seçimi (Kamiq / Fabia / Scala)
         assistant_id = self.user_states.get(user_id)
         for aid, keywords in self.ASSISTANT_CONFIG.items():
             if any(k.lower() in user_message.lower() for k in keywords):
@@ -317,7 +447,7 @@ class ChatbotAPI:
                 self.user_states[user_id] = assistant_id
                 break
 
-        # 2) Görsel mi?
+        # 2) Görsel isteği mi?
         if self._is_image_request(user_message):
             if not assistant_id:
                 yield "Henüz bir asistan seçilmediği için görsel gösteremiyorum.\n".encode("utf-8")
@@ -328,6 +458,7 @@ class ChatbotAPI:
                 yield "Asistan adını bulamadım.\n".encode("utf-8")
                 return
 
+            # Filtre
             keyword = self._extract_image_keyword(user_message, assistant_name)
             if keyword:
                 full_filter = f"{assistant_name} {keyword}"
@@ -339,9 +470,15 @@ class ChatbotAPI:
                 yield f"'{full_filter}' için uygun bir görsel bulamadım.\n".encode("utf-8")
                 return
 
-            # 3) desired_group kararı
+            # Kullanıcı mesajı
             lower_msg = user_message.lower()
-            if "monte carlo" in lower_msg:
+
+            # 3) Hangi özel sıralama?
+            if "scala görsel" in lower_msg:
+                desired_group = "scala_custom"
+            elif "kamiq görsel" in lower_msg:  # <-- YENİ EKLENDİ
+                desired_group = "kamiq_custom"
+            elif "monte carlo" in lower_msg:
                 desired_group = "monte_carlo"
             elif ("premium" in lower_msg) or ("elite" in lower_msg):
                 desired_group = "premium_elite"
@@ -354,10 +491,9 @@ class ChatbotAPI:
             else:
                 desired_group = None
 
-            # 4) Sıralama
+            # 4) Sıralama ve yanıt üretimi
             sorted_images = self._multi_group_sort(found_images, desired_group)
 
-            # 5) HTML çıkışı
             for img_file in sorted_images:
                 img_url = f"/static/images/{img_file}"
                 base_name, _ = os.path.splitext(img_file)
@@ -367,13 +503,14 @@ class ChatbotAPI:
 
             return
 
-        # 4) Görsel isteği yoksa => Chat
+        # 5) Görsel isteği yoksa => normal chat
         if not assistant_id:
             yield "Uygun bir asistan bulunamadı.\n".encode("utf-8")
             return
 
-        # (Opsiyonel) ChatGPT / OpenAI
+        # 6) (Örnek) OpenAI Chat'te işlem
         try:
+            # Bu kısım tamamen demo/dummy
             thread = self.client.beta.threads.create(
                 messages=[{"role": "user", "content": user_message}]
             )
@@ -407,6 +544,9 @@ class ChatbotAPI:
             self.logger.error(f"Yanıt oluşturma hatası: {str(e)}")
             yield f"Bir hata oluştu: {str(e)}\n".encode("utf-8")
 
+    # -------------------------------------------
+    # Yardımcı fonksiyonlar
+    # -------------------------------------------
     def _is_image_request(self, message: str):
         msg = message.lower()
         return ("resim" in msg) or ("fotoğraf" in msg) or ("görsel" in msg)

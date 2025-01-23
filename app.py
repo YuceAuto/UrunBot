@@ -1,3 +1,6 @@
+# ----------------------------------------------------
+# app.py
+# ----------------------------------------------------
 from modules.chatbot_api import ChatbotAPI
 import sys
 import os
