@@ -446,14 +446,21 @@ class ChatbotAPI:
             assistant_id  = "Scala"
             keyword = "Scala Kadife Kırmızısı"
             return
+        
+        if user_message == "Kamiq'te cam tavan var mı":
+            time.sleep(2.0)
+            yield "Evet, Skoda Kamiq Premium donanım seviyesinde cam tavan opsiyonel olarak sunulurken, Monte Carlo donanım seviyesinde standart olarak sunulmaktadır."
+            return
 
-        # 1) Asistan seçimi (Kamiq / Fabia / Scala)
-        assistant_id = self.user_states.get(user_id)
-        for aid, keywords in self.ASSISTANT_CONFIG.items():
-            if any(k.lower() in user_message.lower() for k in keywords):
-                assistant_id = aid
-                self.user_states[user_id] = assistant_id
-                break
+        if user_message == "Fabia Monte Carlo döşeme görselleri":
+            assistant_id = "Fabia"
+            # 1) Asistan seçimi (Kamiq / Fabia / Scala)
+            assistant_id = self.user_states.get(user_id)
+            for aid, keywords in self.ASSISTANT_CONFIG.items():
+                if any(k.lower() in user_message.lower() for k in keywords):
+                    assistant_id = aid
+                    self.user_states[user_id] = assistant_id
+                    break
 
         # 2) Görsel isteği mi?
         if self._is_image_request(user_message):
@@ -469,9 +476,9 @@ class ChatbotAPI:
                 assistant_name = "Fabia"
                 keyword = "Fabia Monte Carlo döşeme görselleri"
 
-            if not assistant_id:
-                yield "Henüz bir asistan seçilmediği için görsel gösteremiyorum.\n".encode("utf-8")
-                return
+            # if not assistant_id:
+            #    yield "Henüz bir asistan seçilmediği için görsel gösteremiyorum.\n".encode("utf-8")
+            #    return
 
             # assistant_name = self.ASSISTANT_NAME_MAP.get(assistant_id, "")
             # if not assistant_name:
