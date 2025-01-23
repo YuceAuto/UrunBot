@@ -14,6 +14,7 @@ class MarkdownProcessor:
         for line in lines:
             stripped_line = line.strip()
 
+            print(stripped_line)
             # Çift tırnak ve tek tırnak dönüşümleri
             stripped_line = re.sub(r"(\d)''(\d)", r'\1"\2', stripped_line)
             stripped_line = stripped_line.replace("\\'", "'")
