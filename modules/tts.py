@@ -1,3 +1,4 @@
+import asyncio
 import os
 import requests
 import io
@@ -19,10 +20,10 @@ class ElevenLabsTTS:
         self.api_key = os.getenv("ELEVENLABS_API_KEY")
         self.voice_id = os.getenv("ELEVENLABS_VOICE_ID")
         self.url = f"https://api.elevenlabs.io/v1/text-to-speech/{self.voice_id}"
-
+        # TTS ile ilgili başlatma işlemleri
+        self.current_task = None
         # Pygame ses sistemi başlatılır
         pygame.mixer.init()
-
         if not self.api_key or not self.voice_id:
             raise ValueError("API anahtarı veya ses kimliği eksik. Lütfen .env dosyasını kontrol edin.")
 
@@ -69,28 +70,6 @@ class ElevenLabsTTS:
         except Exception as e:
             print(f"Beklenmeyen bir hata oluştu: {e}")
 
-    async def play(self, file_path):
-        """
-        Yerel bir MP3 dosyasını çalmak için bir fonksiyon.
-
-        :param file_path: Çalınacak MP3 dosyasının yolu
-        """
-        try:
-            if not os.path.isfile(file_path):
-                raise FileNotFoundError(f"Dosya bulunamadı: {file_path}")
-
-            pygame.mixer.music.load(file_path)
-            pygame.mixer.music.play()
-
-            # Ses bitene kadar bekle
-            while pygame.mixer.music.get_busy():
-                pygame.time.Clock().tick(10)
-
-        except FileNotFoundError as fnf_error:
-            print(fnf_error)
-        except Exception as e:
-            print(f"Beklenmeyen bir hata oluştu: {e}")
-
     def get_duration(self, file_path):
         """
         MP3 dosyasının süresini döndüren bir fonksiyon.
@@ -109,6 +88,30 @@ class ElevenLabsTTS:
         except Exception as e:
             print(f"MP3 süresi alınırken hata oluştu: {e}")
             return None
+    
+    async def play(self, file_path):
+        if not os.path.isfile(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        def sync_play():
+            import pygame
+            pygame.mixer.init()
+            pygame.mixer.music.load(file_path)
+            pygame.mixer.music.play()
+
+            # Ses bitene kadar bekle
+            while pygame.mixer.music.get_busy():
+                pygame.time.Clock().tick(10)
+
+        loop = asyncio.get_event_loop()
+        self.current_task = loop.run_in_executor(None, sync_play)  # Ses oynatma görevini başlat
+        await self.current_task  # Oynatma işlemini tamamlanana kadar bekle
+
+    def stop(self):
+        if self.current_task:
+            import pygame
+            pygame.mixer.music.stop()  # Ses oynatma işlemini durdur
+            self.current_task = None  # Görevi sıfırla
 
 # Örnek kullanım
 if __name__ == "__main__":

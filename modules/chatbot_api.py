@@ -96,14 +96,16 @@ class ChatbotAPI:
         response_generator = self._generate_response(user_message, user_id)
         return self.app.response_class(response_generator, mimetype="text/plain")
 
-
     def _generate_response(self, user_message, user_id):
         self.logger.info(f"Processing message from User ({user_id}): '{user_message}'")
-        time.sleep(1.0)
-        predefined_wait_response = ("answers\\cevabınız_hazırlanıyor.txt", "sounds\\cevabınız_hazırlanıyor.mp3")
-        yield from self._auto_response(*predefined_wait_response)
-        yield "\n\n"
-        time.sleep(2.0)
+
+        # Yeni bir mesaj geldiğinde mevcut sesli yanıtı durdur
+        self.tts.stop()
+
+        if user_message in ["ok", "tamam", "teşekkürler", "teşekkür ederim"]:
+            time.sleep(1.5)
+            yield "Teşekkür ederim.\n".encode("utf-8")
+            return
 
         if self._is_image_request(user_message):
             yield from self._handle_image_request(user_message, user_id)
@@ -111,26 +113,26 @@ class ChatbotAPI:
 
         assistant_id = self.user_states.get(user_id) or self._select_assistant(user_message)
         if not assistant_id:
-            yield "No suitable assistant found.\n".encode("utf-8")
+            time.sleep(2.0)
+            yield "Başka bir sorunuz varsa yardımcı olabilirim.\n".encode("utf-8")
             return
 
         self.user_states[user_id] = assistant_id
 
-
-        # 3) Handle predefined responses
+        # Önceden tanımlı cevapları kontrol et
         predefined_responses = {
             "kamiq özellikleri": ("answers\\kamiq_özellikleri.txt", "sounds\\kamiq_özellikleri.mp3"),
             "scala özellikleri": ("answers\\scala_özellikleri.txt", "sounds\\scala_özellikleri.mp3"),
             "fabia özellikleri": ("answers\\fabia_özellikleri.txt", "sounds\\fabia_özellikleri.mp3"),
             "yüce auto genel": ("answers\\yüceauto_genel.txt", "sounds\\yüceauto_genel.mp3"),
             "kamiq genel": ("answers\\kamiq_genel.txt", "sounds\\kamiq_genel.mp3"),
+            "kamiq hakkında genel bilgi verebilir misin": ("answers\\kamiq_genel.txt", "sounds\\kamiq_genel.mp3"),
             "scala genel": ("answers\\scala_genel.txt", "sounds\\scala_genel.mp3"),
             "fabia genel": ("answers\\fabia_genel.txt", "sounds\\fabia_genel.mp3"),
             "ortak avantajlar": ("answers\\ortak_avantajlar.txt", "sounds\\ortak_avantajlar.mp3"),
             "merhaba": ("answers\\greeting.txt", "sounds\\greeting.mp3"),
         }
 
-        # Find the best match based on similarity
         best_match = None
         highest_similarity = 0.0
         for key in predefined_responses.keys():
@@ -138,16 +140,15 @@ class ChatbotAPI:
             if similarity > highest_similarity:
                 highest_similarity = similarity
                 best_match = key
-        print(best_match, highest_similarity)
-        # If similarity is above 80%, select the best match
+
+        print(highest_similarity)
         if best_match and highest_similarity >= 0.55:
             path1, path2 = predefined_responses[best_match]
-            print(path1, path2, "-------------------------------")
             yield from self._auto_response(path1, path2)
             return
 
-        # 4) ChatGPT (OpenAI) response streaming
         try:
+            # OpenAI'dan yanıt al
             thread = self.client.beta.threads.create(messages=[{"role": "user", "content": user_message}])
             run = self.client.beta.threads.runs.create(thread_id=thread.id, assistant_id=assistant_id)
             start_time = time.time()
@@ -160,18 +161,8 @@ class ChatbotAPI:
                         if msg.role == "assistant":
                             content = str(msg.content)
                             content = self.markdown_processor.transform_text_to_markdown(content)
-
-                            # Optional table extraction
-                            tables = self.markdown_processor.extract_markdown_tables_from_text(content)
-                            if tables:
-                                self.logger.info(f"Found tables: {tables}")
-                                for i, tbl in enumerate(tables, 1):
-                                    html_table = self.markdown_processor.markdown_table_to_html(tbl)
-                                    yield f"\n--- Table {i} (HTML) ---\n".encode("utf-8")
-                                    yield html_table.encode("utf-8")
-                                    yield b"\n"
                             yield content.encode("utf-8")
-                    return
+                            return
 
                 elif run.status == "failed":
                     yield "Failed to generate a response.\n".encode("utf-8")
@@ -222,32 +213,35 @@ class ChatbotAPI:
         text_file_path = os.path.join(ASSETS_DIR, path1)
         tts_file_path = os.path.join(ASSETS_DIR, path2)
 
-        # 1. Yazılı cevabı döndür
+        # 1. Yazılı cevabı oku
         with open(text_file_path, "r", encoding="utf-8") as file:
             content = file.read()
 
-        # 2. Sesli cevabı oynat
+        # 2. Yazılı cevabı ekrana yaz
+        if isinstance(content, str):
+            yield content.encode("utf-8")
+        else:
+            yield content
+
+        # 3. TTS kontrolü (Sesli cevap var mı?)
         if not self.tts:
-            yield content.encode("utf-8")  # Yazılı cevabı hemen döndür
             self.logger.error("TTS instance is not initialized.")
             yield "TTS system is unavailable at the moment.\n".encode("utf-8")
             return
 
+        # 4. Sesli cevabı oynat
         try:
-            # Ses oynatma için async işlev
             async def play_audio():
                 await self.tts.play(tts_file_path)
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)  # Yeni thread'e bir loop ata
-            yield content.encode("utf-8")  # Yazılı cevabı hemen döndür
-            new_loop.run_until_complete(play_audio())
+
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(play_audio())
         except Exception as e:
             self.logger.error(f"Audio playback error: {e}")
             yield f"Audio playback failed: {e}\n".encode("utf-8")
         finally:
-            new_loop.close()  # İşlem bitince loop'u güvenli bir şekilde kapat
-            return
-
+            loop.close()
 
     def run(self, debug=True):
         self.app.run(debug=debug)
