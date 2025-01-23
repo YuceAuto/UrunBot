@@ -17,7 +17,7 @@ class MarkdownProcessor:
             stripped_line = re.sub(r"【.*?】", "", stripped_line).strip()
 
             # ### Başlık -> <b>Başlık</b>
-            if stripped_line.startswith('### '):
+            if stripped_line.startswith('###'):
                 transformed_lines.append(f"<b>{stripped_line[4:]}</b><br>")
 
             # Tek satırlık başlık

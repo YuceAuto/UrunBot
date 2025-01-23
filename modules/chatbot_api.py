@@ -163,25 +163,25 @@ class ChatbotAPI:
         özel bir sıralama fonksiyonu.
         """
         custom_order = [
-            ["scala", "monte", "carlo", "standart", "direksiyon", "simidi"],  # 1
-            ["scala", "premium", "standart", "direksiyon", "simidi"],        # 2
             ["scala", "elite", "standart", "direksiyon", "simidi"],          # 3
-            ["scala", "monte", "carlo", "standart", "döşeme"],               # 4
-            ["scala", "monte", "carlo", "standart", "kapı", "döşeme"],       # 5
+            ["scala", "premium", "standart", "direksiyon", "simidi"],        # 2
+            ["scala", "monte", "carlo", "standart", "direksiyon", "simidi"],  # 1
+            ["scala", "elite", "studio", "standart", "döşeme"],              # 10
+            ["scala", "elite", "studio", "standart", "kapı", "döşeme"],      # 11
             ["scala", "premium", "lodge", "standart", "döşeme"],             # 6
             ["scala", "premium", "lodge", "standart", "kapı", "döşeme"],     # 7
             ["scala", "premium", "suite", "opsiyonel", "döşeme"],            # 8
             ["scala", "premium", "suite", "opsiyonel", "kapı", "döşeme"],    # 9
-            ["scala", "elite", "studio", "standart", "döşeme"],              # 10
-            ["scala", "elite", "studio", "standart", "kapı", "döşeme"],      # 11
-            ["scala", "monte", "carlo", "standart", "ön", "dekor"],          # 12
+            ["scala", "monte", "carlo", "standart", "döşeme"],               # 4
+            ["scala", "monte", "carlo", "standart", "kapı", "döşeme"],       # 5
+            ["scala", "elite", "studio", "standart", "ön", "dekor"],         # 15
             ["scala", "premium", "lodge", "standart", "ön", "dekor"],        # 13
             ["scala", "premium", "suite", "opsiyonel", "ön", "dekor"],       # 14
-            ["scala", "elite", "studio", "standart", "ön", "dekor"],         # 15
-            ["scala", "monte", "carlo", "standart", "ön", "konsol"],         # 16
+            ["scala", "monte", "carlo", "standart", "ön", "dekor"],          # 12
+            ["scala", "elite", "studio", "standart", "ön", "konsol"],        # 19
             ["scala", "premium", "lodge", "standart", "ön", "konsol"],       # 17
             ["scala", "premium", "suite", "opsiyonel", "ön", "konsol"],      # 18
-            ["scala", "elite", "studio", "standart", "ön", "konsol"],        # 19
+            ["scala", "monte", "carlo", "standart", "ön", "konsol"],         # 16
             ["scala", "monte", "carlo", "standart", "dijital", "gösterge", "paneli"], # 20
             ["scala", "premium", "standart", "gösterge", "paneli"],          # 21
             ["scala", "elite", "standart", "gösterge", "paneli"],            # 22
@@ -520,7 +520,7 @@ class ChatbotAPI:
             )
 
             start_time = time.time()
-            timeout = 30
+            timeout = 45
 
             while time.time() - start_time < timeout:
                 run = self.client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
