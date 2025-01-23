@@ -11,7 +11,7 @@ class ImageManager:
         self.stopwords = {
             "model", "araç", "arac", "paylaşabilir", "paylaşır",
             "misin", "mısın", "lütfen", "istiyorum", "?",
-            "görsel", "resim", "fotoğraf", "fotograf"
+            "görsel", "resim", "fotoğraf", "fotograf",
         }
 
     def load_images(self):

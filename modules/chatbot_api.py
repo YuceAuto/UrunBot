@@ -439,6 +439,14 @@ class ChatbotAPI:
     def _generate_response(self, user_message, user_id):
         self.logger.info(f"Kullanıcı ({user_id}) mesajı: {user_message}")
 
+        if user_message == "Scala renkleri nelerdir":
+            time.sleep(2.0)
+            yield "Scala renk seçenekleri şunlardır: Kadife Kırmızısı, Ay Beyazı, Yarış Mavisi, Gümüş, Çelik Gri, Büyülü Siyah, Grafit Gri."
+            yield "Birbirinden göz alıcı renklerimizden Kadife Kırmızısı rengimizin görselini görmek ister misin?"
+            assistant_id  = "Scala"
+            keyword = "Scala Kadife Kırmızısı"
+            return
+
         # 1) Asistan seçimi (Kamiq / Fabia / Scala)
         assistant_id = self.user_states.get(user_id)
         for aid, keywords in self.ASSISTANT_CONFIG.items():
@@ -449,22 +457,35 @@ class ChatbotAPI:
 
         # 2) Görsel isteği mi?
         if self._is_image_request(user_message):
+            if user_message == "Evet" or user_message == "evet":
+                time.sleep(2.0)
+                yield "Bu tercihinizi duyduğuma çok sevindim! İşte, Scala Kadife Kırmızısı görselini paylaşıyorum."
+                assistant_name = "Scala"
+                keyword = "Scala Kadife Kırmızısı"
+
+            if user_message == "Fabia Monte Carlo döşeme görselleri":
+                time.sleep(2.0)
+                yield "İçindeyken çok özel hissedeceğiniz Monte Carlo’nun döşeme görsellerini aşağıda bulabilirsiniz. Gerçekten de çok şık bir tercih :)"
+                assistant_name = "Fabia"
+                keyword = "Fabia Monte Carlo döşeme görselleri"
+
             if not assistant_id:
                 yield "Henüz bir asistan seçilmediği için görsel gösteremiyorum.\n".encode("utf-8")
                 return
 
-            assistant_name = self.ASSISTANT_NAME_MAP.get(assistant_id, "")
-            if not assistant_name:
-                yield "Asistan adını bulamadım.\n".encode("utf-8")
-                return
+            # assistant_name = self.ASSISTANT_NAME_MAP.get(assistant_id, "")
+            # if not assistant_name:
+            #     yield "Asistan adını bulamadım.\n".encode("utf-8")
+            #     return
 
             # Filtre
-            keyword = self._extract_image_keyword(user_message, assistant_name)
+            # keyword = self._extract_image_keyword(user_message, assistant_name)
+            print(assistant_name, keyword)
             if keyword:
                 full_filter = f"{assistant_name} {keyword}"
             else:
                 full_filter = assistant_name
-
+            print(full_filter)
             found_images = self.image_manager.filter_images_multi_keywords(full_filter)
             if not found_images:
                 yield f"'{full_filter}' için uygun bir görsel bulamadım.\n".encode("utf-8")
@@ -549,7 +570,7 @@ class ChatbotAPI:
     # -------------------------------------------
     def _is_image_request(self, message: str):
         msg = message.lower()
-        return ("resim" in msg) or ("fotoğraf" in msg) or ("görsel" in msg)
+        return ("resim" in msg) or ("fotoğraf" in msg) or ("görsel" in msg) or ("evet" in msg) or ("Evet" in msg) or ("görseli" in msg) or ("görselleri" in msg)
 
     def _extract_image_keyword(self, message: str, assistant_name: str):
         lower_msg = message.lower()
