@@ -1,18 +1,16 @@
 import os
 import re
-from PIL import Image
 import matplotlib.pyplot as plt
 
-class ImageManager:
-    def __init__(self, images_folder):
-        self.images_folder = images_folder
-        self.image_files = []
+from PIL import Image
+from modules.config import Config
 
-        self.stopwords = {
-            "model", "araç", "arac", "paylaşabilir", "paylaşır",
-            "misin", "mısın", "lütfen", "istiyorum", "?",
-            "görsel", "resim", "fotoğraf", "fotograf"
-        }
+class ImageManager:
+    def __init__(self):
+        self.config = Config()
+        self.stopwords = self.config.stopwords
+        self.images_folder = self.config.image_paths
+        self.image_files = []
 
     def load_images(self):
         if not os.path.exists(self.images_folder):
