@@ -49,6 +49,7 @@ function processBotMessage(fullText, uniqueId) {
   const extractedValue = extractTextContentBlock(normalizedText);
   const textToCheck = extractedValue ? extractedValue : normalizedText;
 
+  // Tablo arama
   const tableRegex = /(\|.*?\|\n\|.*?\|\n[\s\S]+)/;
   const tableMatch = tableRegex.exec(textToCheck);
 

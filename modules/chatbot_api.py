@@ -157,11 +157,6 @@ class ChatbotAPI:
     # 1) Scala özel sıralama fonksiyonu
     # ----------------------------------------------------
     def _custom_scala_sort(self, image_list):
-        """
-        "Scala görsel" sorusu geldiğinde,
-        kullanıcı tarafından talep edilen özel sırayı uygulamak için
-        özel bir sıralama fonksiyonu.
-        """
         custom_order = [
             ["scala", "monte", "carlo", "standart", "direksiyon", "simidi"],  # 1
             ["scala", "premium", "standart", "direksiyon", "simidi"],        # 2
@@ -217,16 +212,9 @@ class ChatbotAPI:
         return sorted(image_list, key=order_key)
 
     # ----------------------------------------------------
-    # 2) Kamiq özel sıralama fonksiyonu (YENİ EKLENEN)
+    # 2) Kamiq özel sıralama fonksiyonu
     # ----------------------------------------------------
     def _custom_kamiq_sort(self, image_list):
-        """
-        "Kamiq görsel" sorusu geldiğinde,
-        kullanıcı tarafından talep edilen özel sırayı uygulamak için
-        özel bir sıralama fonksiyonu.
-        """
-
-        # İstediğiniz tam sıra:
         custom_order = [
             ["kamiq", "monte", "carlo", "standart", "direksiyon", "simidi"],  # 1
             ["kamiq", "premium", "standart", "direksiyon", "simidi"],        # 2
@@ -391,13 +379,13 @@ class ChatbotAPI:
           "fabia_12"
           "scala_12"
           "kamiq_12"
-          "scala_custom" -> özel sıralama
-          "kamiq_custom" -> yeni eklediğimiz özel sıralama
-          None -> 7 aşamalı default
+          "scala_custom"
+          "kamiq_custom"
+          None
         """
         if desired_group == "scala_custom":
             return self._custom_scala_sort(image_list)
-        elif desired_group == "kamiq_custom":  # <-- YENİ EKLENDİ
+        elif desired_group == "kamiq_custom":
             return self._custom_kamiq_sort(image_list)
         elif desired_group == "monte_carlo":
             image_list.sort(key=self.get_priority_for_mc)
@@ -448,6 +436,65 @@ class ChatbotAPI:
                 break
 
         # 2) Görsel isteği mi?
+        lower_msg = user_message.lower()
+
+        # ---------------------------------------------------------
+        # ÖZEL KONTROL: Fabia premium ve Monte Carlo görselleri
+        # ---------------------------------------------------------
+        # Kullanıcı "fabia + premium + monte carlo" ve "resim/fotoğraf/görsel" kelimelerini kullanmış mı?
+        if ("fabia" in lower_msg
+            and "premium" in lower_msg
+            and "monte carlo" in lower_msg
+            and self._is_image_request(user_message)):
+
+            # Belirttiğiniz çiftler (22 adet)
+            fabia_pairs = [
+                ("Fabia_Premium_Ay_Beyazı.png", "Fabia_Monte_Carlo_Ay_Beyazı.png"),
+                ("Fabia_Premium_Gümüş.png", "Fabia_Monte_Carlo_Gümüş.png"),
+                ("Fabia_Premium_Graphite_Gri.png", "Fabia_Monte_Carlo_Graphite_Gri.png"),
+                ("Fabia_Premium_Büyülü_Siyah.png", "Fabia_Monte_Carlo_Büyülü_Siyah.png"),
+                ("Fabia_Premium_Phoenix_Turuncu.png", "Fabia_Monte_Carlo_Phoenix_Turuncu.png"),
+                ("Fabia_Premium_Yarış_Mavisi.png", "Fabia_Monte_Carlo_Yarış_Mavisi.png"),
+                ("Fabia_Premium_Kadife_Kırmızısı.png", "Fabia_Monte_Carlo_Kadife_Kırmızı.png"),
+                ("Fabia_Premium_Gösterge_Paneli.png", "Fabia_Monte_Carlo_Gösterge_Paneli.png"),
+                ("Fabia_Premium_Direksiyon_Simidi.png", "Fabia_Monte_Carlo_Direksiyon_Simidi.png"),
+                ("Fabia_Premium_Suite_Kumaş_Döşeme.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Döşeme.png"),
+                ("Fabia_Premium_Suite_Kumaş_Koltuk_Döşeme.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Koltuk_Döşeme.png"),
+                ("Fabia_Premium_Suite_Kumaş_Ön_Dekor.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Ön_Dekor.png"),
+                ("Fabia_Premium_Lodge_Kumaş_Döşeme.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Döşeme.png"),
+                ("Fabia_Premium_Lodge_Kumaş_Koltuk_Döşemesi.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Koltuk_Döşeme.png"),
+                ("Fabia_Premium_Lodge_Kumaş_Ön_Dekor.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Ön_Dekor.png"),
+                ("Fabia_Premium_Dynamic_Suedia_Kumaş_Döşeme.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Döşeme.png"),
+                ("Fabia_Premium_Dynamic_Suedia_Kumaş_Koltuk_Döşeme.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Koltuk_Döşeme.png"),
+                ("Fabia_Premium_Dynamic_Suedia_Kumaş_Ön_Dekor.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Ön_Dekor.png"),
+                ("Fabia_Premium_Standart_PJ4_Proxima_Jant.png", "Fabia_Monte_Carlo_Standart_PJE_Procyon_Jant.png"),
+                ("Fabia_Premium_Opsiyonel_PJ9_Procyon_Aero_Jant.png", "Fabia_Monte_Carlo_Standart_PJE_Procyon_Jant.png"),
+                ("Fabia_Premium_Opsiyonel_PX0_Urus_Jant.png", "Fabia_Monte_Carlo_Standart_PJE_Procyon_Jant.png"),
+                ("Fabia_Premium_ve_Monte_Carlo_Opsiyonel_PJF_Libra_Jant.png", "Fabia_Monte_Carlo_Standart_PJE_Procyon_Jant.png"),
+            ]
+
+            # Dış kapsayıcı (dikeyde alt alta), aralarda küçük bir boşluk
+            yield "<div style='display: flex; flex-direction: column; gap: 15px;'>".encode("utf-8")
+
+            for left_img, right_img in fabia_pairs:
+                left_url = f"/static/images/{left_img}"
+                right_url = f"/static/images/{right_img}"
+                left_title = left_img.replace("_", " ").replace(".png", "")
+                right_title = right_img.replace("_", " ").replace(".png", "")
+
+                # Her çifti yan yana (row) gösteriyoruz
+                html_pair = f"""
+                <div style="display: flex; flex-direction: row; align-items: center; gap: 20px;">
+                  <img src="{left_url}" alt="{left_title}" style="max-width: 300px;" />
+                  <img src="{right_url}" alt="{right_title}" style="max-width: 300px;" />
+                </div>
+                """
+                yield html_pair.encode("utf-8")
+
+            yield "</div>".encode("utf-8")
+            return
+
+        # 2-a) Diğer görsel istek akışı
         if self._is_image_request(user_message):
             if not assistant_id:
                 yield "Henüz bir asistan seçilmediği için görsel gösteremiyorum.\n".encode("utf-8")
@@ -471,12 +518,9 @@ class ChatbotAPI:
                 return
 
             # Kullanıcı mesajı
-            lower_msg = user_message.lower()
-
-            # 3) Hangi özel sıralama?
             if "scala görsel" in lower_msg:
                 desired_group = "scala_custom"
-            elif "kamiq görsel" in lower_msg:  # <-- YENİ EKLENDİ
+            elif "kamiq görsel" in lower_msg:
                 desired_group = "kamiq_custom"
             elif "monte carlo" in lower_msg:
                 desired_group = "monte_carlo"
@@ -491,7 +535,6 @@ class ChatbotAPI:
             else:
                 desired_group = None
 
-            # 4) Sıralama ve yanıt üretimi
             sorted_images = self._multi_group_sort(found_images, desired_group)
 
             for img_file in sorted_images:
@@ -508,9 +551,8 @@ class ChatbotAPI:
             yield "Uygun bir asistan bulunamadı.\n".encode("utf-8")
             return
 
-        # 6) (Örnek) OpenAI Chat'te işlem
+        # 6) (Örnek) OpenAI Chat'te işlem (demo/dummy)
         try:
-            # Bu kısım tamamen demo/dummy
             thread = self.client.beta.threads.create(
                 messages=[{"role": "user", "content": user_message}]
             )
