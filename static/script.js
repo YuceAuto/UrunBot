@@ -1,3 +1,6 @@
+// ----------------------------------------------------
+// script.js
+// ----------------------------------------------------
 function extractTextContentBlock(fullText) {
   const regex = /\[TextContentBlock\(.*?value=(['"])([\s\S]*?)\1.*?\)\]/;
   const match = regex.exec(fullText);
@@ -7,6 +10,9 @@ function extractTextContentBlock(fullText) {
   return null;
 }
 
+/**
+ * Gelen tek bir Markdown tablosunu HTML'e çevirir.
+ */
 function markdownTableToHTML(mdTable) {
   const lines = mdTable.trim().split("\n").map(line => line.trim());
   if (lines.length < 2) {
@@ -44,33 +50,88 @@ function markdownTableToHTML(mdTable) {
   return html;
 }
 
+/**
+ * processBotMessage: Backend'den gelen cevabı parçalayıp
+ * tabloları bulup işleyen fonksiyon. Eğer tablo
+ * altına gelen metin varsa, onu ayrı bir baloncuya koyar.
+ */
 function processBotMessage(fullText, uniqueId) {
+  // Normalleştirme
   const normalizedText = fullText.replace(/\\n/g, "\n");
   const extractedValue = extractTextContentBlock(normalizedText);
   const textToCheck = extractedValue ? extractedValue : normalizedText;
 
-  // Tablo arama
-  const tableRegex = /(\|.*?\|\n\|.*?\|\n[\s\S]+)/;
-  const tableMatch = tableRegex.exec(textToCheck);
+  // Birden çok tablo aramak için global regex
+  const tableRegexGlobal = /(\|.*?\|\n\|.*?\|\n[\s\S]+?)(?=\n\n|$)/g;
 
-  if (tableMatch && tableMatch[1]) {
-    const markdownTable = tableMatch[1];
-    const beforeTable = textToCheck.slice(0, tableMatch.index).trim();
-    const afterTable = textToCheck.slice(tableMatch.index + markdownTable.length).trim();
-    const tableHTML = markdownTableToHTML(markdownTable);
+  let finalHTML = "";
+  let newBubbles = [];  // Tablonun altındaki metin veya son satırları burada toplayacağız
+  let lastIndex = 0;
+  let match;
 
-    let finalHTML = "";
-    if (beforeTable) finalHTML += `<p>${beforeTable}</p>`;
+  while ((match = tableRegexGlobal.exec(textToCheck)) !== null) {
+    const tableMarkdown = match[1];
+
+    // 1) Tablonun öncesindeki düz metin (tablodan önceki kısım)
+    const textBefore = textToCheck.substring(lastIndex, match.index);
+    if (textBefore.trim()) {
+      finalHTML += `<p>${textBefore.trim()}</p>`;
+    }
+
+    // 2) Tabloyu satır satır kontrol edip "Bu bilgiler ışığında..." satırını ayıralım
+    let lines = tableMarkdown.split("\n");
+    let lastLine = lines[lines.length - 1].trim();
+
+    // Son satır "Bu bilgiler ışığında..." gibi başlıyorsa tablo dışına al
+    if (lastLine.toLowerCase().startsWith("bu bilgiler ışığında")) {
+      lines.pop();
+      newBubbles.push(lastLine);
+    }
+
+    // 3) Temizlenmiş tablo HTML'e dönüştür
+    const cleanedTable = lines.join("\n");
+    const tableHTML = markdownTableToHTML(cleanedTable);
     finalHTML += tableHTML;
-    if (afterTable) finalHTML += `<p>${afterTable}</p>`;
 
-    $(`#botMessageContent-${uniqueId}`).html(finalHTML);
-  } else {
-    const formattedText = textToCheck.replace(/\n/g, "<br>");
-    $(`#botMessageContent-${uniqueId}`).html(formattedText);
+    lastIndex = tableRegexGlobal.lastIndex;
+  }
+
+  // 4) Tablo(lar)dan sonra kalan düz metin => yeni baloncuk
+  if (lastIndex < textToCheck.length) {
+    const textAfter = textToCheck.substring(lastIndex);
+    if (textAfter.trim()) {
+      newBubbles.push(textAfter.trim());
+    }
+  }
+
+  // 5) Ana baloncuya (mesaja) finalHTML'i yerleştir
+  $(`#botMessageContent-${uniqueId}`).html(finalHTML);
+
+  // 6) newBubbles içindeki metinleri ayrı baloncuklar olarak ekrana yansıtalım
+  if (newBubbles.length > 0) {
+    newBubbles.forEach(msg => {
+      const newBubbleId = "separateBubble_" + Date.now() + "_" + Math.random();
+      const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const botHtml = `
+        <div class="d-flex justify-content-start mb-4">
+          <img src="static/images/fotograf.png"
+               class="rounded-circle user_img_msg"
+               alt="bot image">
+          <div class="msg_cotainer">
+            <span id="botMessageContent-${newBubbleId}">${msg}</span>
+          </div>
+          <span class="msg_time">${currentTime}</span>
+        </div>
+      `;
+      $("#messageFormeight").append(botHtml);
+      $("#messageFormeight").scrollTop($("#messageFormeight")[0].scrollHeight);
+    });
   }
 }
 
+/**
+ * Mesaj gönderme işlevleri (kullanıcıdan input alıp sunucuya /ask endpoint'ine POST vb.)
+ */
 $(document).ready(function () {
   $("#messageArea").on("submit", function (e) {
     e.preventDefault();
@@ -79,6 +140,7 @@ $(document).ready(function () {
     if (!rawText) return;
 
     const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    // Kullanıcı baloncuğu
     const userHtml = `
       <div class="d-flex justify-content-end mb-4">
         <div class="msg_cotainer_send">
@@ -93,6 +155,7 @@ $(document).ready(function () {
     $("#messageFormeight").append(userHtml);
     inputField.val("");
 
+    // Bot mesajı için unique ID
     const uniqueId = Date.now();
     const botHtml = `
       <div class="d-flex justify-content-start mb-4">
@@ -108,6 +171,7 @@ $(document).ready(function () {
     $("#messageFormeight").append(botHtml);
     $("#messageFormeight").scrollTop($("#messageFormeight")[0].scrollHeight);
 
+    // Sunucuya POST isteği
     fetch("/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -130,6 +194,7 @@ $(document).ready(function () {
         function readChunk() {
           return reader.read().then(({ done, value }) => {
             if (done) {
+              // Tüm yanıtı aldık; işliyoruz
               processBotMessage(botMessage, uniqueId);
               return;
             }
@@ -146,7 +211,7 @@ $(document).ready(function () {
         $(`#botMessageContent-${uniqueId}`).text("Bir hata oluştu: " + err.message);
       });
 
-    // 9. dakika uyarı
+    // Örnek: 9. dakika uyarısı
     setTimeout(() => {
       document.getElementById('notificationBar').style.display = 'block';
     }, 9 * 60 * 1000);

@@ -15,7 +15,33 @@ from modules.markdown_utils import MarkdownProcessor
 load_dotenv()
 
 # ---------------------------------------------------------
+# Örnek renk listesi (ihtiyaca göre genişletebilirsiniz)
+# ---------------------------------------------------------
+KNOWN_COLORS = [
+    "ay beyazı",
+    "gümüş",
+    "çelik gri",
+    "grafit gri",
+    "büyülü siyah",
+    "kadife kırmızısı",
+    "yarış mavisi",
+    "phoenix turuncu"
+]
+
+def parse_color_names(text: str) -> list:
+    """
+    Metin içinde bilinen renk isimlerini arar ve bulduğu her bir rengi (küçük harfle) döndürür.
+    """
+    lower_text = text.lower()
+    found = []
+    for color in KNOWN_COLORS:
+        if color in lower_text:
+            found.append(color)
+    return found
+
+# ---------------------------------------------------------
 # A) Monte Carlo listesi (12 adım)
+# ---------------------------------------------------------
 monte_carlo_12 = [
     ["monte", "carlo", "direksiyon", "simidi"],
     ["monte", "carlo", "döşeme", "standart"],
@@ -47,9 +73,7 @@ premium_elite_12 = [
     ["premium", "ve", "monte", "carlo", "opsiyonel", "pjf", "jant"]
 ]
 
-# ---------------------------------------------------------
 # C) Fabia / Scala / Kamiq için 12'li örnek listeler
-# ---------------------------------------------------------
 fabia_12 = [
     ["fabia", "direksiyon", "simidi"],
     ["fabia", "döşeme", "standart"],
@@ -116,7 +140,9 @@ class ChatbotAPI:
             "asst_njSG1NVgg4axJFmvVYAIXrpM": ["Scala"],
         }
 
+        # Burada user_states'ı tutuyoruz: user_id -> { assistant_id: ..., pending_color_images: [...] }
         self.user_states = {}
+
         self.ASSISTANT_NAME_MAP = {
             "asst_fw6RpRp8PbNiLUR1KB2XtAkK": "Kamiq",
             "asst_yeDl2aiHy0uoGGjHRmr2dlYB": "Fabia",
@@ -158,48 +184,48 @@ class ChatbotAPI:
     # ----------------------------------------------------
     def _custom_scala_sort(self, image_list):
         custom_order = [
-            ["scala", "monte", "carlo", "standart", "direksiyon", "simidi"],  # 1
-            ["scala", "premium", "standart", "direksiyon", "simidi"],        # 2
-            ["scala", "elite", "standart", "direksiyon", "simidi"],          # 3
-            ["scala", "monte", "carlo", "standart", "döşeme"],               # 4
-            ["scala", "monte", "carlo", "standart", "kapı", "döşeme"],       # 5
-            ["scala", "premium", "lodge", "standart", "döşeme"],             # 6
-            ["scala", "premium", "lodge", "standart", "kapı", "döşeme"],     # 7
-            ["scala", "premium", "suite", "opsiyonel", "döşeme"],            # 8
-            ["scala", "premium", "suite", "opsiyonel", "kapı", "döşeme"],    # 9
-            ["scala", "elite", "studio", "standart", "döşeme"],              # 10
-            ["scala", "elite", "studio", "standart", "kapı", "döşeme"],      # 11
-            ["scala", "monte", "carlo", "standart", "ön", "dekor"],          # 12
-            ["scala", "premium", "lodge", "standart", "ön", "dekor"],        # 13
-            ["scala", "premium", "suite", "opsiyonel", "ön", "dekor"],       # 14
-            ["scala", "elite", "studio", "standart", "ön", "dekor"],         # 15
-            ["scala", "monte", "carlo", "standart", "ön", "konsol"],         # 16
-            ["scala", "premium", "lodge", "standart", "ön", "konsol"],       # 17
-            ["scala", "premium", "suite", "opsiyonel", "ön", "konsol"],      # 18
-            ["scala", "elite", "studio", "standart", "ön", "konsol"],        # 19
-            ["scala", "monte", "carlo", "standart", "dijital", "gösterge", "paneli"], # 20
-            ["scala", "premium", "standart", "gösterge", "paneli"],          # 21
-            ["scala", "elite", "standart", "gösterge", "paneli"],            # 22
-            ["scala", "monte", "carlo", "standart", "multimedya", "sistemi"],# 23
-            ["scala", "premium", "standart", "multimedya", "sistemi"],       # 24
-            ["scala", "elite", "standart", "multimedya", "sistemi"],         # 25
-            ["scala", "monte", "carlo", "pji", "standart", "jant"],          # 26
-            ["scala", "premium", "pj5", "standart", "jant"],                 # 27
-            ["scala", "1.0", "premium", "pj7", "opsiyonel", "jant"],         # 28
-            ["scala", "premium", "pjg", "opsiyonel", "jant"],                # 29
-            ["scala", "premium", "pjn", "opsiyonel", "jant"],                # 30
-            ["scala", "premium", "pjp", "opsiyonel", "jant"],                # 31
-            ["scala", "elite", "pj5", "standart", "jant"],                   # 32
-            ["scala", "elite", "pj7", "opsiyonel", "jant"],                  # 33
-            ["scala", "elite", "pjg", "opsiyonel", "jant"],                  # 34
-            ["scala", "elite", "pjp", "opsiyonel", "jant"],                  # 35
-            ["scala", "ay", "beyazı"],                                       # 36
-            ["scala", "gümüş"],                                             # 37
-            ["scala", "çelik", "gri"],                                       # 38
-            ["scala", "grafit", "gri"],                                      # 39
-            ["scala", "büyülü", "siyah"],                                    # 40
-            ["scala", "kadife", "kırmızısı"],                                # 41
-            ["scala", "yarış", "mavisi"]                                     # 42
+            ["scala", "monte", "carlo", "standart", "direksiyon", "simidi"], 
+            ["scala", "premium", "standart", "direksiyon", "simidi"],        
+            ["scala", "elite", "standart", "direksiyon", "simidi"],          
+            ["scala", "monte", "carlo", "standart", "döşeme"],               
+            ["scala", "monte", "carlo", "standart", "kapı", "döşeme"],       
+            ["scala", "premium", "lodge", "standart", "döşeme"],             
+            ["scala", "premium", "lodge", "standart", "kapı", "döşeme"],     
+            ["scala", "premium", "suite", "opsiyonel", "döşeme"],            
+            ["scala", "premium", "suite", "opsiyonel", "kapı", "döşeme"],    
+            ["scala", "elite", "studio", "standart", "döşeme"],              
+            ["scala", "elite", "studio", "standart", "kapı", "döşeme"],      
+            ["scala", "monte", "carlo", "standart", "ön", "dekor"],          
+            ["scala", "premium", "lodge", "standart", "ön", "dekor"],        
+            ["scala", "premium", "suite", "opsiyonel", "ön", "dekor"],       
+            ["scala", "elite", "studio", "standart", "ön", "dekor"],         
+            ["scala", "monte", "carlo", "standart", "ön", "konsol"],         
+            ["scala", "premium", "lodge", "standart", "ön", "konsol"],       
+            ["scala", "premium", "suite", "opsiyonel", "ön", "konsol"],      
+            ["scala", "elite", "studio", "standart", "ön", "konsol"],        
+            ["scala", "monte", "carlo", "standart", "dijital", "gösterge", "paneli"],
+            ["scala", "premium", "standart", "gösterge", "paneli"],          
+            ["scala", "elite", "standart", "gösterge", "paneli"],            
+            ["scala", "monte", "carlo", "standart", "multimedya", "sistemi"],
+            ["scala", "premium", "standart", "multimedya", "sistemi"],       
+            ["scala", "elite", "standart", "multimedya", "sistemi"],         
+            ["scala", "monte", "carlo", "pji", "standart", "jant"],          
+            ["scala", "premium", "pj5", "standart", "jant"],                 
+            ["scala", "1.0", "premium", "pj7", "opsiyonel", "jant"],         
+            ["scala", "premium", "pjg", "opsiyonel", "jant"],                
+            ["scala", "premium", "pjn", "opsiyonel", "jant"],                
+            ["scala", "premium", "pjp", "opsiyonel", "jant"],                
+            ["scala", "elite", "pj5", "standart", "jant"],                   
+            ["scala", "elite", "pj7", "opsiyonel", "jant"],                  
+            ["scala", "elite", "pjg", "opsiyonel", "jant"],                  
+            ["scala", "elite", "pjp", "opsiyonel", "jant"],                  
+            ["scala", "ay", "beyazı"],                                       
+            ["scala", "gümüş"],                                             
+            ["scala", "çelik", "gri"],                                       
+            ["scala", "grafit", "gri"],                                      
+            ["scala", "büyülü", "siyah"],                                    
+            ["scala", "kadife", "kırmızısı"],                                
+            ["scala", "yarış", "mavisi"]                                     
         ]
 
         def order_key(item):
@@ -216,48 +242,48 @@ class ChatbotAPI:
     # ----------------------------------------------------
     def _custom_kamiq_sort(self, image_list):
         custom_order = [
-            ["kamiq", "monte", "carlo", "standart", "direksiyon", "simidi"],  # 1
-            ["kamiq", "premium", "standart", "direksiyon", "simidi"],        # 2
-            ["kamiq", "elite", "standart", "direksiyon", "simidi"],          # 3
-            ["kamiq", "monte", "carlo", "standart", "döşeme"],               # 4
-            ["kamiq", "monte", "carlo", "standart", "kapı", "döşeme"],       # 5
-            ["kamiq", "premium", "lodge", "standart", "döşeme"],             # 6
-            ["kamiq", "premium", "lodge", "standart", "kapı", "döşeme"],     # 7
-            ["kamiq", "premium", "suite", "opsiyonel", "döşeme"],            # 8
-            ["kamiq", "premium", "suite", "opsiyonel", "kapı", "döşeme"],    # 9
-            ["kamiq", "elite", "studio", "standart", "döşeme"],              # 10
-            ["kamiq", "elite", "studio", "standart", "kapı", "döşeme"],      # 11
-            ["kamiq", "monte", "carlo", "standart", "ön", "dekor"],          # 12
-            ["kamiq", "premium", "lodge", "standart", "ön", "dekor"],        # 13
-            ["kamiq", "premium", "suite", "opsiyonel", "ön", "dekor"],       # 14
-            ["kamiq", "elite", "studio", "standart", "ön", "dekor"],         # 15
-            ["kamiq", "monte", "carlo", "standart", "ön", "konsol"],         # 16
-            ["kamiq", "premium", "lodge", "standart", "ön", "konsol"],       # 17
-            ["kamiq", "premium", "suite", "opsiyonel", "ön", "konsol"],      # 18
-            ["kamiq", "elite", "studio", "standart", "ön", "konsol"],        # 19
-            ["kamiq", "monte", "carlo", "standart", "dijital", "gösterge", "paneli"], # 20
-            ["kamiq", "premium", "standart", "gösterge", "paneli"],          # 21
-            ["kamiq", "elite", "standart", "gösterge", "paneli"],            # 22
-            ["kamiq", "monte", "carlo", "standart", "multimedya", "sistemi"],# 23
-            ["kamiq", "premium", "standart", "multimedya", "sistemi"],       # 24
-            ["kamiq", "elite", "standart", "multimedya", "sistemi"],         # 25
-            ["kamiq", "monte", "carlo", "pji", "standart", "jant"],          # 26
-            ["kamiq", "premium", "pjg", "standart", "jant"],                 # 27
-            ["kamiq", "1.0", "premium", "pj7", "opsiyonel", "jant"],         # 28
-            ["kamiq", "premium", "pjg", "opsiyonel", "jant"],                # 29
-            ["kamiq", "premium", "pjn", "opsiyonel", "jant"],                # 30
-            ["kamiq", "premium", "pjp", "opsiyonel", "jant"],                # 31
-            ["kamiq", "elite", "p02", "standart", "jant"],                   # 32
-            ["kamiq", "1.0", "elite", "pj7", "opsiyonel", "jant"],           # 33
-            ["kamiq", "elite", "pjg", "opsiyonel", "jant"],                  # 34
-            ["kamiq", "elite", "pjp", "opsiyonel", "jant"],                  # 35
-            ["kamiq", "ay", "beyazı"],                                       # 36
-            ["kamiq", "gümüş"],                                             # 37
-            ["kamiq", "graptihe", "gri"],                                    # 38
-            ["kamiq", "büyülü", "siyah"],                                    # 39
-            ["kamiq", "kadife", "kırmızısı"],                                # 40
-            ["kamiq", "yarış", "mavisi"],                                    # 41
-            ["kamiq", "phoenix", "turuncu"]                                  # 42
+            ["kamiq", "monte", "carlo", "standart", "direksiyon", "simidi"],
+            ["kamiq", "premium", "standart", "direksiyon", "simidi"],
+            ["kamiq", "elite", "standart", "direksiyon", "simidi"],
+            ["kamiq", "monte", "carlo", "standart", "döşeme"],
+            ["kamiq", "monte", "carlo", "standart", "kapı", "döşeme"],
+            ["kamiq", "premium", "lodge", "standart", "döşeme"],
+            ["kamiq", "premium", "lodge", "standart", "kapı", "döşeme"],
+            ["kamiq", "premium", "suite", "opsiyonel", "döşeme"],
+            ["kamiq", "premium", "suite", "opsiyonel", "kapı", "döşeme"],
+            ["kamiq", "elite", "studio", "standart", "döşeme"],
+            ["kamiq", "elite", "studio", "standart", "kapı", "döşeme"],
+            ["kamiq", "monte", "carlo", "standart", "ön", "dekor"],
+            ["kamiq", "premium", "lodge", "standart", "ön", "dekor"],
+            ["kamiq", "premium", "suite", "opsiyonel", "ön", "dekor"],
+            ["kamiq", "elite", "studio", "standart", "ön", "dekor"],
+            ["kamiq", "monte", "carlo", "standart", "ön", "konsol"],
+            ["kamiq", "premium", "lodge", "standart", "ön", "konsol"],
+            ["kamiq", "premium", "suite", "opsiyonel", "ön", "konsol"],
+            ["kamiq", "elite", "studio", "standart", "ön", "konsol"],
+            ["kamiq", "monte", "carlo", "standart", "dijital", "gösterge", "paneli"],
+            ["kamiq", "premium", "standart", "gösterge", "paneli"],
+            ["kamiq", "elite", "standart", "gösterge", "paneli"],
+            ["kamiq", "monte", "carlo", "standart", "multimedya", "sistemi"],
+            ["kamiq", "premium", "standart", "multimedya", "sistemi"],
+            ["kamiq", "elite", "standart", "multimedya", "sistemi"],
+            ["kamiq", "monte", "carlo", "pji", "standart", "jant"],
+            ["kamiq", "premium", "pjg", "standart", "jant"],
+            ["kamiq", "1.0", "premium", "pj7", "opsiyonel", "jant"],
+            ["kamiq", "premium", "pjg", "opsiyonel", "jant"],
+            ["kamiq", "premium", "pjn", "opsiyonel", "jant"],
+            ["kamiq", "premium", "pjp", "opsiyonel", "jant"],
+            ["kamiq", "elite", "p02", "standart", "jant"],
+            ["kamiq", "1.0", "elite", "pj7", "opsiyonel", "jant"],
+            ["kamiq", "elite", "pjg", "opsiyonel", "jant"],
+            ["kamiq", "elite", "pjp", "opsiyonel", "jant"],
+            ["kamiq", "ay", "beyazı"],
+            ["kamiq", "gümüş"],
+            ["kamiq", "graptihe", "gri"],
+            ["kamiq", "büyülü", "siyah"],
+            ["kamiq", "kadife", "kırmızısı"],
+            ["kamiq", "yarış", "mavisi"],
+            ["kamiq", "phoenix", "turuncu"]
         ]
 
         def order_key(item):
@@ -381,7 +407,7 @@ class ChatbotAPI:
           "kamiq_12"
           "scala_custom"
           "kamiq_custom"
-          None
+          None => default 7 aşamalı sort
         """
         if desired_group == "scala_custom":
             return self._custom_scala_sort(image_list)
@@ -428,26 +454,69 @@ class ChatbotAPI:
         self.logger.info(f"Kullanıcı ({user_id}) mesajı: {user_message}")
 
         # 1) Asistan seçimi (Kamiq / Fabia / Scala)
-        assistant_id = self.user_states.get(user_id)
+        if user_id not in self.user_states:
+            self.user_states[user_id] = {}  # boş dict oluştur
+
+        assistant_id = self.user_states[user_id].get("assistant_id", None)
+
         for aid, keywords in self.ASSISTANT_CONFIG.items():
             if any(k.lower() in user_message.lower() for k in keywords):
                 assistant_id = aid
-                self.user_states[user_id] = assistant_id
+                self.user_states[user_id]["assistant_id"] = assistant_id
                 break
 
-        # 2) Görsel isteği mi?
         lower_msg = user_message.lower()
 
+        # --------------------------------------------------------------------------------
+        # 0) Kullanıcı "evet" derse ve pending_color_images varsa -> görselleri otomatik paylaş
+        # --------------------------------------------------------------------------------
+        if lower_msg.strip() in ["evet", "evet.", "evet!", "evet?", "evet,"]:
+            pending_colors = self.user_states[user_id].get("pending_color_images", [])
+            if pending_colors:
+                # Asistan adını al
+                if assistant_id is not None:
+                    asst_name = self.ASSISTANT_NAME_MAP.get(assistant_id, "scala")
+                else:
+                    asst_name = "scala"
+
+                all_found_images = []
+                for clr in pending_colors:
+                    keywords = f"{asst_name} {clr}"  # "Scala ay beyazı" vb
+                    results = self.image_manager.filter_images_multi_keywords(keywords)
+                    all_found_images.extend(results)
+
+                # Sıralama
+                asst_lower = asst_name.lower()
+                if asst_lower == "scala":
+                    sorted_images = self._multi_group_sort(all_found_images, "scala_custom")
+                elif asst_lower == "kamiq":
+                    sorted_images = self._multi_group_sort(all_found_images, "kamiq_custom")
+                else:
+                    sorted_images = self._multi_group_sort(all_found_images, None)
+
+                if not sorted_images:
+                    yield "Bu renklerle ilgili görsel bulunamadı.\n".encode("utf-8")
+                    return
+
+                yield "<b>İşte seçtiğiniz renk görselleri:</b><br>".encode("utf-8")
+                for img_file in sorted_images:
+                    img_url = f"/static/images/{img_file}"
+                    base_name, _ = os.path.splitext(img_file)
+                    pretty_name = base_name.replace("_", " ")
+                    yield f"<h4>{pretty_name}</h4>\n".encode("utf-8")
+                    yield f'<img src="{img_url}" alt="{pretty_name}" style="max-width:300px; margin:5px;" />\n'.encode("utf-8")
+
+                self.user_states[user_id]["pending_color_images"] = []
+                return
+
         # ---------------------------------------------------------
-        # ÖZEL KONTROL: Fabia premium ve Monte Carlo görselleri
+        # ÖZEL KONTROL: "fabia + premium + monte carlo" -> çift görsel karşılaştırma
         # ---------------------------------------------------------
-        # Kullanıcı "fabia + premium + monte carlo" ve "resim/fotoğraf/görsel" kelimelerini kullanmış mı?
         if ("fabia" in lower_msg
             and "premium" in lower_msg
             and "monte carlo" in lower_msg
             and self._is_image_request(user_message)):
 
-            # Belirttiğiniz çiftler (22 adet)
             fabia_pairs = [
                 ("Fabia_Premium_Ay_Beyazı.png", "Fabia_Monte_Carlo_Ay_Beyazı.png"),
                 ("Fabia_Premium_Gümüş.png", "Fabia_Monte_Carlo_Gümüş.png"),
@@ -473,7 +542,6 @@ class ChatbotAPI:
                 ("Fabia_Premium_ve_Monte_Carlo_Opsiyonel_PJF_Libra_Jant.png", "Fabia_Monte_Carlo_Standart_PJE_Procyon_Jant.png"),
             ]
 
-            # Dış kapsayıcı (dikeyde alt alta), aralarda küçük bir boşluk
             yield "<div style='display: flex; flex-direction: column; gap: 15px;'>".encode("utf-8")
 
             for left_img, right_img in fabia_pairs:
@@ -482,7 +550,6 @@ class ChatbotAPI:
                 left_title = left_img.replace("_", " ").replace(".png", "")
                 right_title = right_img.replace("_", " ").replace(".png", "")
 
-                # Her çifti yan yana (row) gösteriyoruz
                 html_pair = f"""
                 <div style="display: flex; flex-direction: row; align-items: center; gap: 20px;">
                   <img src="{left_url}" alt="{left_title}" style="max-width: 300px;" />
@@ -505,7 +572,6 @@ class ChatbotAPI:
                 yield "Asistan adını bulamadım.\n".encode("utf-8")
                 return
 
-            # Filtre
             keyword = self._extract_image_keyword(user_message, assistant_name)
             if keyword:
                 full_filter = f"{assistant_name} {keyword}"
@@ -517,7 +583,7 @@ class ChatbotAPI:
                 yield f"'{full_filter}' için uygun bir görsel bulamadım.\n".encode("utf-8")
                 return
 
-            # Kullanıcı mesajı
+            # Sıralama isteği
             if "scala görsel" in lower_msg:
                 desired_group = "scala_custom"
             elif "kamiq görsel" in lower_msg:
@@ -563,6 +629,7 @@ class ChatbotAPI:
 
             start_time = time.time()
             timeout = 30
+            assistant_response = ""
 
             while time.time() - start_time < timeout:
                 run = self.client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
@@ -571,16 +638,25 @@ class ChatbotAPI:
                     for msg in message_response.data:
                         if msg.role == "assistant":
                             content = str(msg.content)
-                            content = self.markdown_processor.transform_text_to_markdown(content)
-                            yield content.encode("utf-8")
-                    return
+                            content_md = self.markdown_processor.transform_text_to_markdown(content)
+                            assistant_response = content  # ham cevabı saklıyoruz
+                            yield content_md.encode("utf-8")
+                    break
                 elif run.status == "failed":
                     yield "Yanıt oluşturulamadı.\n".encode("utf-8")
                     return
 
                 time.sleep(0.5)
 
-            yield "Yanıt alma zaman aşımına uğradı.\n".encode("utf-8")
+            if not assistant_response:
+                yield "Yanıt alma zaman aşımına uğradı.\n".encode("utf-8")
+                return
+
+            # 7) Asistan cevabında "görsel olarak görmek ister misiniz?" vb. kontrol
+            if "görsel olarak görmek ister misiniz?" in assistant_response.lower():
+                detected_colors = parse_color_names(assistant_response)  # ["ay beyazı", "gümüş", ...]
+                if detected_colors:
+                    self.user_states[user_id]["pending_color_images"] = detected_colors
 
         except Exception as e:
             self.logger.error(f"Yanıt oluşturma hatası: {str(e)}")
