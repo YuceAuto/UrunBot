@@ -14,20 +14,26 @@ function extractTextContentBlock(fullText) {
  * Gelen tek bir Markdown tablosunu HTML'e çevirir.
  */
 function markdownTableToHTML(mdTable) {
+  // 1) Satır bazlı parçalayalım
   const lines = mdTable.trim().split("\n").map(line => line.trim());
   if (lines.length < 2) {
     return `<p>${mdTable}</p>`;
   }
 
+  // 2) İlk satır: başlık satırı
   const headerLine = lines[0];
   const headerCells = headerLine.split("|").map(cell => cell.trim()).filter(Boolean);
+
+  // 3) Gövde satırları (2. satır "---" gibi tablo ayırıcı olabilir, o yüzden 2'den sonrasını alırız)
   const bodyLines = lines.slice(2);
 
   let html = `<table class="table table-bordered table-sm my-blue-table">
 <thead><tr>`;
+
   headerCells.forEach(cell => {
     html += `<th>${cell}</th>`;
   });
+
   html += `</tr></thead>
 <tbody>
 `;
@@ -52,81 +58,86 @@ function markdownTableToHTML(mdTable) {
 
 /**
  * processBotMessage: Backend'den gelen cevabı parçalayıp
- * tabloları bulup işleyen fonksiyon. Eğer tablo
- * altına gelen metin varsa, onu ayrı bir baloncuya koyar.
+ * tabloları bulup, tablo öncesi / tablo / tablo sonrası
+ * kısımlarını ayrı baloncuklar hâlinde gösterir.
  */
 function processBotMessage(fullText, uniqueId) {
-  // Normalleştirme
+  // 1) Metni normalleştirme
   const normalizedText = fullText.replace(/\\n/g, "\n");
   const extractedValue = extractTextContentBlock(normalizedText);
   const textToCheck = extractedValue ? extractedValue : normalizedText;
 
-  // Birden çok tablo aramak için global regex
+  // 2) Birden çok tablo aramak için global regex
   const tableRegexGlobal = /(\|.*?\|\n\|.*?\|\n[\s\S]+?)(?=\n\n|$)/g;
 
-  let finalHTML = "";
-  let newBubbles = [];  // Tablonun altındaki metin veya son satırları burada toplayacağız
+  // 3) Yeni baloncuklar listesi
+  let newBubbles = [];
   let lastIndex = 0;
   let match;
 
+  // 4) Her tabloyu tek tek yakala ve önce/sonra parçaları ayır
   while ((match = tableRegexGlobal.exec(textToCheck)) !== null) {
     const tableMarkdown = match[1];
 
-    // 1) Tablonun öncesindeki düz metin (tablodan önceki kısım)
-    const textBefore = textToCheck.substring(lastIndex, match.index);
-    if (textBefore.trim()) {
-      finalHTML += `<p>${textBefore.trim()}</p>`;
+    // "Tablodan önceki metin" -> ilk baloncuk
+    const textBefore = textToCheck.substring(lastIndex, match.index).trim();
+    if (textBefore) {
+      newBubbles.push({
+        type: 'text',
+        content: textBefore
+      });
     }
 
-    // 2) Tabloyu satır satır kontrol edip "Bu bilgiler ışığında..." satırını ayıralım
-    let lines = tableMarkdown.split("\n");
-    let lastLine = lines[lines.length - 1].trim();
-
-    // Son satır "Bu bilgiler ışığında..." gibi başlıyorsa tablo dışına al
-    if (lastLine.toLowerCase().startsWith("bu bilgiler ışığında")) {
-      lines.pop();
-      newBubbles.push(lastLine);
-    }
-
-    // 3) Temizlenmiş tablo HTML'e dönüştür
-    const cleanedTable = lines.join("\n");
-    const tableHTML = markdownTableToHTML(cleanedTable);
-    finalHTML += tableHTML;
+    // "Tablonun kendisi" -> ikinci baloncuk
+    newBubbles.push({
+      type: 'table',
+      content: tableMarkdown
+    });
 
     lastIndex = tableRegexGlobal.lastIndex;
   }
 
-  // 4) Tablo(lar)dan sonra kalan düz metin => yeni baloncuk
+  // "Tablo sonrası kalan metin" -> üçüncü (son) baloncuk
   if (lastIndex < textToCheck.length) {
-    const textAfter = textToCheck.substring(lastIndex);
-    if (textAfter.trim()) {
-      newBubbles.push(textAfter.trim());
+    const textAfter = textToCheck.substring(lastIndex).trim();
+    if (textAfter) {
+      newBubbles.push({
+        type: 'text',
+        content: textAfter
+      });
     }
   }
 
-  // 5) Ana baloncuya (mesaja) finalHTML'i yerleştir
-  $(`#botMessageContent-${uniqueId}`).html(finalHTML);
+  // 5) Daha önceki "botMessageContent-uniqueId" baloncuğunu kaldır
+  //    (Çünkü artık birden fazla baloncuğa böleceğiz.)
+  $(`#botMessageContent-${uniqueId}`).closest(".d-flex").remove();
 
-  // 6) newBubbles içindeki metinleri ayrı baloncuklar olarak ekrana yansıtalım
-  if (newBubbles.length > 0) {
-    newBubbles.forEach(msg => {
-      const newBubbleId = "separateBubble_" + Date.now() + "_" + Math.random();
-      const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const botHtml = `
-        <div class="d-flex justify-content-start mb-4">
-          <img src="static/images/fotograf.png"
-               class="rounded-circle user_img_msg"
-               alt="bot image">
-          <div class="msg_cotainer">
-            <span id="botMessageContent-${newBubbleId}">${msg}</span>
-          </div>
-          <span class="msg_time">${currentTime}</span>
+  // 6) Tüm parçaları yeni baloncuklar olarak ekrana bas
+  newBubbles.forEach((bubble) => {
+    const bubbleId = "separateBubble_" + Date.now() + "_" + Math.random();
+    const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    let bubbleContent = "";
+    if (bubble.type === "table") {
+      bubbleContent = markdownTableToHTML(bubble.content);
+    } else {
+      bubbleContent = bubble.content;
+    }
+
+    const botHtml = `
+      <div class="d-flex justify-content-start mb-4">
+        <img src="static/images/fotograf.png"
+             class="rounded-circle user_img_msg"
+             alt="bot image">
+        <div class="msg_cotainer">
+          <span id="botMessageContent-${bubbleId}">${bubbleContent}</span>
         </div>
-      `;
-      $("#messageFormeight").append(botHtml);
-      $("#messageFormeight").scrollTop($("#messageFormeight")[0].scrollHeight);
-    });
-  }
+        <span class="msg_time">${currentTime}</span>
+      </div>
+    `;
+    $("#messageFormeight").append(botHtml);
+    $("#messageFormeight").scrollTop($("#messageFormeight")[0].scrollHeight);
+  });
 }
 
 /**
