@@ -11,13 +11,14 @@ def create_app():
 
     logger = Utils.setup_logger()
 
-    # Birinci Kod'daki ChatbotAPI’yi, İkinci Kod yapısına ekledik
+    # ChatbotAPI: Birinci Kod'daki gibi çok parçalı çıkış, veritabanına kayıt vb. entegre
     chatbot = ChatbotAPI(
         logger=logger,
         static_folder="static",
         template_folder="templates"
     )
-    # chatbot.app -> Flask instance
+
+    # chatbot.app => asıl Flask instance
     return chatbot.app
 
 if __name__ == "__main__":

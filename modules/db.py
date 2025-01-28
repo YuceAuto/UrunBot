@@ -1,0 +1,52 @@
+import pyodbc
+import pythoncom
+import win32com.client as win32
+import logging
+
+def get_db_connection():
+    conn = pyodbc.connect(
+        'DRIVER={ODBC Driver 17 for SQL Server};'
+        'SERVER=10.0.0.20\\SQLYC;'
+        'DATABASE=SkodaBot;'
+        'UID=skodabot;'
+        'PWD=Skodabot.2024;'
+    )
+    return conn
+
+def create_tables():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='conversations' AND xtype='U')
+        CREATE TABLE conversations (
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            user_id NVARCHAR(255) NOT NULL,
+            question NVARCHAR(MAX) NOT NULL,
+            answer NVARCHAR(MAX) NOT NULL,
+            customer_answer INT DEFAULT 0,
+            timestamp DATETIME DEFAULT GETDATE()
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def save_to_db(user_id, question, answer, customer_answer=0):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO conversations (user_id, question, answer, customer_answer)
+        VALUES (?, ?, ?, ?)
+    ''', (user_id, question, answer, customer_answer))
+    conn.commit()
+    conn.close()
+
+def send_email(subject, body, to_email):
+    logging.info(f"[MAIL] To: {to_email}, Subject: {subject}, Body: {body}")
+    pythoncom.CoInitialize()
+    outlook = win32.Dispatch('outlook.application')
+    mail = outlook.CreateItem(0)
+    mail.Subject = subject
+    mail.Body = body
+    mail.To = to_email
+    mail.Send()
+    logging.info("[MAIL] Email sent successfully")

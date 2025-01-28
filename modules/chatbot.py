@@ -3,7 +3,7 @@ import time
 import logging
 import re
 import openai
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, session
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -11,6 +11,9 @@ from modules.image_manager import ImageManager
 from modules.markdown_utils import MarkdownProcessor
 from modules.config import Config
 from modules.utils import Utils
+from modules.db import create_tables, save_to_db, send_email
+
+import secrets
 
 load_dotenv()
 
@@ -23,7 +26,13 @@ class ChatbotAPI:
         )
         CORS(self.app)
 
+        # Session için secret key
+        self.app.secret_key = secrets.token_hex(16)
+
         self.logger = logger if logger else self._setup_logger()
+
+        # MSSQL tabloyu oluşturma
+        create_tables()
 
         openai.api_key = os.getenv("OPENAI_API_KEY")
         self.client = openai
@@ -39,7 +48,9 @@ class ChatbotAPI:
         self.ASSISTANT_CONFIG = self.config.ASSISTANT_CONFIG
         self.ASSISTANT_NAME_MAP = self.config.ASSISTANT_NAME_MAP
 
-        # user_states[user_id] = { "assistant_id": ..., "pending_color_images": [...], ...}
+        # Session timeout
+        self.SESSION_TIMEOUT = 30 * 60  # 30 dakika
+
         self.user_states = {}
 
         self._define_routes()
@@ -57,17 +68,29 @@ class ChatbotAPI:
     def _define_routes(self):
         @self.app.route("/", methods=["GET"])
         def home():
+            # Session reset
+            session.pop('last_activity', None)
             return render_template("index.html")
 
         @self.app.route("/ask", methods=["POST"])
         def ask():
             return self._ask()
 
-        @self.app.route("/feedback", methods=["POST"])
-        def feedback():
-            return self._feedback()
+        # Like butonu/feedback tamamen kaldırıldı.
+        # Dolayısıyla /feedback route yok.
+
+        @self.app.route("/check_session", methods=["GET"])
+        def check_session():
+            if 'last_activity' in session:
+                now = time.time()
+                if now - session['last_activity'] > self.SESSION_TIMEOUT:
+                    return jsonify({"active": False})
+            return jsonify({"active": True})
 
     def _ask(self):
+        """
+        /ask endpoint -> Kullanıcı sorusu -> _generate_response
+        """
         try:
             data = request.get_json()
             if not data:
@@ -82,17 +105,11 @@ class ChatbotAPI:
         if not user_message:
             return jsonify({"response": "Please enter a question."})
 
+        if 'last_activity' not in session:
+            session['last_activity'] = time.time()
+
         response_generator = self._generate_response(user_message, user_id)
         return self.app.response_class(response_generator, mimetype="text/plain")
-
-    def _feedback(self):
-        try:
-            data = request.get_json()
-            self.logger.info(f"Geri bildirim alındı: {data}")
-            return jsonify({"message": "Geri bildiriminiz için teşekkür ederiz!"})
-        except Exception as e:
-            self.logger.error(f"Geri bildirim hatası: {str(e)}")
-            return jsonify({"error": "Bir hata oluştu."}), 500
 
     def _generate_response(self, user_message, user_id):
         self.logger.info(f"Kullanıcı ({user_id}) mesajı: {user_message}")
@@ -111,14 +128,11 @@ class ChatbotAPI:
 
         lower_msg = user_message.lower()
 
-        # 0) Kullanıcı "evet" derse ve pending_color_images varsa -> görselleri gönder
+        # 0) "evet" + pending_color_images
         if lower_msg.strip() in ["evet", "evet.", "evet!", "evet?", "evet,"]:
             pending_colors = self.user_states[user_id].get("pending_color_images", [])
             if pending_colors:
-                if assistant_id is not None:
-                    asst_name = self.ASSISTANT_NAME_MAP.get(assistant_id, "scala")
-                else:
-                    asst_name = "scala"
+                asst_name = self.ASSISTANT_NAME_MAP.get(assistant_id, "scala") if assistant_id else "scala"
 
                 all_found_images = []
                 for clr in pending_colors:
@@ -134,9 +148,11 @@ class ChatbotAPI:
                     sorted_images = self.utils.multi_group_sort(all_found_images, None)
 
                 if not sorted_images:
+                    save_to_db(user_id, user_message, "Bu renklerle ilgili görsel bulunamadı.")
                     yield "Bu renklerle ilgili görsel bulunamadı.\n".encode("utf-8")
                     return
 
+                save_to_db(user_id, user_message, "Renk görselleri listelendi (evet).")
                 yield "<b>İşte seçtiğiniz renk görselleri:</b><br>".encode("utf-8")
                 for img_file in sorted_images:
                     img_url = f"/static/images/{img_file}"
@@ -156,28 +172,9 @@ class ChatbotAPI:
 
             fabia_pairs = [
                 ("Fabia_Premium_Ay_Beyazı.png", "Fabia_Monte_Carlo_Ay_Beyazı.png"),
-                ("Fabia_Premium_Gümüş.png", "Fabia_Monte_Carlo_Gümüş.png"),
-                ("Fabia_Premium_Graphite_Gri.png", "Fabia_Monte_Carlo_Graphite_Gri.png"),
-                ("Fabia_Premium_Büyülü_Siyah.png", "Fabia_Monte_Carlo_Büyülü_Siyah.png"),
-                ("Fabia_Premium_Phoenix_Turuncu.png", "Fabia_Monte_Carlo_Phoenix_Turuncu.png"),
-                ("Fabia_Premium_Yarış_Mavisi.png", "Fabia_Monte_Carlo_Yarış_Mavisi.png"),
-                ("Fabia_Premium_Kadife_Kırmızısı.png", "Fabia_Monte_Carlo_Kadife_Kırmızı.png"),
-                ("Fabia_Premium_Gösterge_Paneli.png", "Fabia_Monte_Carlo_Gösterge_Paneli.png"),
-                ("Fabia_Premium_Direksiyon_Simidi.png", "Fabia_Monte_Carlo_Direksiyon_Simidi.png"),
-                ("Fabia_Premium_Suite_Kumaş_Döşeme.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Döşeme.png"),
-                ("Fabia_Premium_Suite_Kumaş_Koltuk_Döşeme.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Koltuk_Döşeme.png"),
-                ("Fabia_Premium_Suite_Kumaş_Ön_Dekor.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Ön_Dekor.png"),
-                ("Fabia_Premium_Lodge_Kumaş_Döşeme.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Döşeme.png"),
-                ("Fabia_Premium_Lodge_Kumaş_Koltuk_Döşemesi.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Koltuk_Döşeme.png"),
-                ("Fabia_Premium_Lodge_Kumaş_Ön_Dekor.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Ön_Dekor.png"),
-                ("Fabia_Premium_Dynamic_Suedia_Kumaş_Döşeme.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Döşeme.png"),
-                ("Fabia_Premium_Dynamic_Suedia_Kumaş_Koltuk_Döşeme.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Koltuk_Döşeme.png"),
-                ("Fabia_Premium_Dynamic_Suedia_Kumaş_Ön_Dekor.png", "Fabia_Monte_Carlo_Suedia_Kumaş_Ön_Dekor.png"),
-                ("Fabia_Premium_Standart_PJ4_Proxima_Jant.png", "Fabia_Monte_Carlo_Standart_PJE_Procyon_Jant.png"),
-                ("Fabia_Premium_Opsiyonel_PJ9_Procyon_Aero_Jant.png", "Fabia_Monte_Carlo_Standart_PJE_Procyon_Jant.png"),
-                ("Fabia_Premium_Opsiyonel_PX0_Urus_Jant.png", "Fabia_Monte_Carlo_Standart_PJE_Procyon_Jant.png"),
-                ("Fabia_Premium_ve_Monte_Carlo_Opsiyonel_PJF_Libra_Jant.png", "Fabia_Monte_Carlo_Standart_PJE_Procyon_Jant.png"),
+                ...
             ]
+            save_to_db(user_id, user_message, "Fabia + Premium + Monte Carlo karşılaştırma gösterildi.")
             yield "<div style='display: flex; flex-direction: column; gap: 15px;'>".encode("utf-8")
             for left_img, right_img in fabia_pairs:
                 left_url = f"/static/images/{left_img}"
@@ -195,14 +192,16 @@ class ChatbotAPI:
             yield "</div>".encode("utf-8")
             return
 
-        # 2) Görsel isteği mi?
+        # 2) Görsel isteği?
         if self.utils.is_image_request(user_message):
             if not assistant_id:
+                save_to_db(user_id, user_message, "Henüz asistan seçilmedi, görsel yok.")
                 yield "Henüz bir asistan seçilmediği için görsel gösteremiyorum.\n".encode("utf-8")
                 return
 
             assistant_name = self.ASSISTANT_NAME_MAP.get(assistant_id, "")
             if not assistant_name:
+                save_to_db(user_id, user_message, "Asistan adını bulamadım.")
                 yield "Asistan adını bulamadım.\n".encode("utf-8")
                 return
 
@@ -214,6 +213,7 @@ class ChatbotAPI:
 
             found_images = self.image_manager.filter_images_multi_keywords(full_filter)
             if not found_images:
+                save_to_db(user_id, user_message, f"'{full_filter}' için görsel yok.")
                 yield f"'{full_filter}' için uygun bir görsel bulamadım.\n".encode("utf-8")
                 return
 
@@ -235,6 +235,7 @@ class ChatbotAPI:
                 desired_group = None
 
             sorted_images = self.utils.multi_group_sort(found_images, desired_group)
+            save_to_db(user_id, user_message, f"{len(sorted_images)} görsel bulundu ve listelendi.")
 
             for img_file in sorted_images:
                 img_url = f"/static/images/{img_file}"
@@ -245,13 +246,14 @@ class ChatbotAPI:
 
             return
 
-        # 3) Normal chat akışı (OpenAI)
+        # 3) Normal chat (OpenAI)
         if not assistant_id:
+            save_to_db(user_id, user_message, "Uygun asistan bulunamadı.")
             yield "Uygun bir asistan bulunamadı.\n".encode("utf-8")
             return
 
         try:
-            # Demo
+            # Demo: openai beta.threads
             thread = self.client.beta.threads.create(
                 messages=[{"role": "user", "content": user_message}]
             )
@@ -276,16 +278,20 @@ class ChatbotAPI:
                             yield content_md.encode("utf-8")
                     break
                 elif run.status == "failed":
+                    save_to_db(user_id, user_message, "Yanıt oluşturulamadı.")
                     yield "Yanıt oluşturulamadı.\n".encode("utf-8")
                     return
 
                 time.sleep(0.5)
 
             if not assistant_response:
+                save_to_db(user_id, user_message, "Zaman aşımı.")
                 yield "Yanıt alma zaman aşımına uğradı.\n".encode("utf-8")
                 return
 
-            # Cevapta renk geçiyorsa ve "görsel olarak görmek ister misiniz?" geçiyorsa:
+            # DB'ye normal cevabı kaydet
+            save_to_db(user_id, user_message, assistant_response)
+
             if "görsel olarak görmek ister misiniz?" in assistant_response.lower():
                 detected_colors = self.utils.parse_color_names(assistant_response)
                 if detected_colors:
@@ -293,6 +299,7 @@ class ChatbotAPI:
 
         except Exception as e:
             self.logger.error(f"Yanıt oluşturma hatası: {str(e)}")
+            save_to_db(user_id, user_message, f"Hata: {str(e)}")
             yield f"Bir hata oluştu: {str(e)}\n".encode("utf-8")
 
     def run(self, debug=True):
