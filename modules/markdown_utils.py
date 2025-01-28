@@ -1,6 +1,3 @@
-# ----------------------------------------------------
-# markdown_utils.py
-# ----------------------------------------------------
 import re
 
 class MarkdownProcessor:
@@ -19,17 +16,15 @@ class MarkdownProcessor:
             # PDF referanslarını kaldır
             stripped_line = re.sub(r"【.*?】", "", stripped_line).strip()
 
-            # ### Başlık -> <b>Başlık</b>
+            # ### Başlık
             if stripped_line.startswith('### '):
                 transformed_lines.append(f"<b>{stripped_line[4:]}</b><br>")
-
             # Tek satırlık başlık
             elif (stripped_line
                   and not stripped_line.startswith('- ')
                   and re.match(r'^[A-Za-zÇŞĞÜÖİ0-9 ]+:?$', stripped_line)):
                 heading_text = re.sub(r':$', '', stripped_line)
                 transformed_lines.append(f"<b>{heading_text}</b><br>")
-
             elif stripped_line.startswith('- '):
                 transformed_lines.append(f"&bull; {stripped_line[2:]}<br>")
             else:

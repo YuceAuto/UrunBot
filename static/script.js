@@ -1,5 +1,5 @@
 // ----------------------------------------------------
-// script.js
+// script.js (Birinci Kod'daki gibi)
 // ----------------------------------------------------
 function extractTextContentBlock(fullText) {
   const regex = /\[TextContentBlock\(.*?value=(['"])([\s\S]*?)\1.*?\)\]/;
@@ -11,7 +11,7 @@ function extractTextContentBlock(fullText) {
 }
 
 /**
- * Gelen tek bir Markdown tablosunu HTML'e çevirir.
+ * Gelen tek bir Markdown tablosunu HTML'e çevirir (Birinci Kod).
  */
 function markdownTableToHTML(mdTable) {
   // 1) Satır bazlı parçalayalım
@@ -24,7 +24,7 @@ function markdownTableToHTML(mdTable) {
   const headerLine = lines[0];
   const headerCells = headerLine.split("|").map(cell => cell.trim()).filter(Boolean);
 
-  // 3) Gövde satırları (2. satır "---" gibi tablo ayırıcı olabilir, o yüzden 2'den sonrasını alırız)
+  // 3) Gövde satırları (2. satır "---" gibi tablo ayırıcı olabilir)
   const bodyLines = lines.slice(2);
 
   let html = `<table class="table table-bordered table-sm my-blue-table">
@@ -59,27 +59,29 @@ function markdownTableToHTML(mdTable) {
 /**
  * processBotMessage: Backend'den gelen cevabı parçalayıp
  * tabloları bulup, tablo öncesi / tablo / tablo sonrası
- * kısımlarını ayrı baloncuklar hâlinde gösterir.
+ * kısımlarını ayrı baloncuklar hâlinde gösterir. (Birinci Kod yaklaşımı)
  */
 function processBotMessage(fullText, uniqueId) {
   // 1) Metni normalleştirme
   const normalizedText = fullText.replace(/\\n/g, "\n");
+
+  // 2) (Birinci Kod) "TextContentBlock" varsa çek
   const extractedValue = extractTextContentBlock(normalizedText);
   const textToCheck = extractedValue ? extractedValue : normalizedText;
 
-  // 2) Birden çok tablo aramak için global regex
+  // 3) Birden çok tablo aramak için global regex
   const tableRegexGlobal = /(\|.*?\|\n\|.*?\|\n[\s\S]+?)(?=\n\n|$)/g;
 
-  // 3) Yeni baloncuklar listesi
+  // 4) Yeni baloncuklar listesi
   let newBubbles = [];
   let lastIndex = 0;
   let match;
 
-  // 4) Her tabloyu tek tek yakala ve önce/sonra parçaları ayır
+  // 5) Her tabloyu tek tek yakala ve önce/sonra parçaları ayır
   while ((match = tableRegexGlobal.exec(textToCheck)) !== null) {
     const tableMarkdown = match[1];
 
-    // "Tablodan önceki metin" -> ilk baloncuk
+    // "Tablodan önceki metin"
     const textBefore = textToCheck.substring(lastIndex, match.index).trim();
     if (textBefore) {
       newBubbles.push({
@@ -88,7 +90,7 @@ function processBotMessage(fullText, uniqueId) {
       });
     }
 
-    // "Tablonun kendisi" -> ikinci baloncuk
+    // "Tablonun kendisi"
     newBubbles.push({
       type: 'table',
       content: tableMarkdown
@@ -97,7 +99,7 @@ function processBotMessage(fullText, uniqueId) {
     lastIndex = tableRegexGlobal.lastIndex;
   }
 
-  // "Tablo sonrası kalan metin" -> üçüncü (son) baloncuk
+  // "Tablo sonrası kalan metin"
   if (lastIndex < textToCheck.length) {
     const textAfter = textToCheck.substring(lastIndex).trim();
     if (textAfter) {
@@ -108,11 +110,11 @@ function processBotMessage(fullText, uniqueId) {
     }
   }
 
-  // 5) Daha önceki "botMessageContent-uniqueId" baloncuğunu kaldır
-  //    (Çünkü artık birden fazla baloncuğa böleceğiz.)
+  // 6) Daha önce oluşturduğumuz "botMessageContent-uniqueId" baloncuğunu kaldır
+  //    (Çünkü artık birden çok baloncuk ekleyeceğiz.)
   $(`#botMessageContent-${uniqueId}`).closest(".d-flex").remove();
 
-  // 6) Tüm parçaları yeni baloncuklar olarak ekrana bas
+  // 7) Tüm parçaları yeni baloncuklar olarak ekrana bas
   newBubbles.forEach((bubble) => {
     const bubbleId = "separateBubble_" + Date.now() + "_" + Math.random();
     const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -121,7 +123,8 @@ function processBotMessage(fullText, uniqueId) {
     if (bubble.type === "table") {
       bubbleContent = markdownTableToHTML(bubble.content);
     } else {
-      bubbleContent = bubble.content;
+      // Metin normal '\n' -> <br> dönüşümü
+      bubbleContent = bubble.content.replace(/\n/g, "<br>");
     }
 
     const botHtml = `
@@ -141,7 +144,7 @@ function processBotMessage(fullText, uniqueId) {
 }
 
 /**
- * Mesaj gönderme işlevleri (kullanıcıdan input alıp sunucuya /ask endpoint'ine POST vb.)
+ * Mesaj gönderme işlevleri (Birinci Kod'a benzer)
  */
 $(document).ready(function () {
   $("#messageArea").on("submit", function (e) {
@@ -151,6 +154,7 @@ $(document).ready(function () {
     if (!rawText) return;
 
     const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
     // Kullanıcı baloncuğu
     const userHtml = `
       <div class="d-flex justify-content-end mb-4">
@@ -166,7 +170,7 @@ $(document).ready(function () {
     $("#messageFormeight").append(userHtml);
     inputField.val("");
 
-    // Bot mesajı için unique ID
+    // Bot baloncuğu (önce bir geçici baloncuk)
     const uniqueId = Date.now();
     const botHtml = `
       <div class="d-flex justify-content-start mb-4">
@@ -182,7 +186,7 @@ $(document).ready(function () {
     $("#messageFormeight").append(botHtml);
     $("#messageFormeight").scrollTop($("#messageFormeight")[0].scrollHeight);
 
-    // Sunucuya POST isteği
+    // Sunucuya POST (stream response)
     fetch("/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -205,7 +209,7 @@ $(document).ready(function () {
         function readChunk() {
           return reader.read().then(({ done, value }) => {
             if (done) {
-              // Tüm yanıtı aldık; işliyoruz
+              // Tüm yanıt geldi; işliyoruz
               processBotMessage(botMessage, uniqueId);
               return;
             }

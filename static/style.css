@@ -1,12 +1,9 @@
-/* ----------------------------------------------------
-   style.css
-   ---------------------------------------------------- */
 /* Body / HTML tam ekran + gradyan arka plan */
 body, html {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: #6F797A; /* Sol arka plan */
+  background: #6F797A;
   background: -webkit-linear-gradient(to right, #0E3A2F, #78FAAE);
   background: linear-gradient(to right, #0E3A2F, #78FAAE);
 }
