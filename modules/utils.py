@@ -7,12 +7,6 @@ class Utils:
 
     def __init__(self):
         self.config = Config()
-        self.logger = logging.getLogger("ChatbotAPI")
-        self.handler = logging.StreamHandler()
-        self.formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-        self.handler.setFormatter(self.formatter)
-        self.logger.addHandler(self.handler)
-        self.logger.setLevel(logging.INFO)
 
     def is_image_request(self, message):
         return any(term in message.lower() for term in ["resim", "fotoğraf", "görsel"])
@@ -39,8 +33,15 @@ class Utils:
         return len(custom_order)
 
     @staticmethod
-    def setup_logger(self):
-        return self.logger
+    def setup_logger():
+        logger = logging.getLogger("ChatbotAPI")
+        if not logger.handlers:  # Avoid duplicate handlers
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        return logger
 
     def _custom_scala_sort(self, image_list):
         return sorted(self.order_key(image_list, self.config.custom_order_scala), key=self.order_key)
