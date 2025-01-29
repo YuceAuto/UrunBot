@@ -177,3 +177,4 @@ class Utils:
             return image_list
         else:
             return self._default_7step_sort(image_list)
+
