@@ -8,12 +8,12 @@ class MarkdownProcessor:
         for line in lines:
             stripped_line = line.strip()
 
-            # 2''3 -> 2"3
-            stripped_line = re.sub(r"(\d)''(\d)", r'\1"\2', stripped_line)
+            # 2''3 -> 2"3 vb. düzeltme
+            stripped_line = re.sub(r"(\d)''(\d)", r'\1\"\2', stripped_line)
             stripped_line = stripped_line.replace("\\'", "'")
             # **bold** -> <b>...</b>
             stripped_line = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", stripped_line)
-            # PDF referanslarını kaldır
+            # PDF referanslarını kaldır (örnek)
             stripped_line = re.sub(r"【.*?】", "", stripped_line).strip()
 
             # ### Başlık

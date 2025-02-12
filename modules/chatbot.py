@@ -15,6 +15,22 @@ from modules.db import create_tables, save_to_db, send_email
 
 import secrets
 
+# EKLENDİ: Scala, Kamiq ve Fabia tabloları
+from modules.scala_data import (
+    SCALA_ELITE_MD,
+    SCALA_PREMIUM_MD,
+    SCALA_MONTE_CARLO_MD
+)
+from modules.kamiq_data import (
+    KAMIQ_ELITE_MD,
+    KAMIQ_PREMIUM_MD,
+    KAMIQ_MONTE_CARLO_MD
+)
+from modules.fabia_data import (
+    FABIA_PREMIUM_MD,
+    FABIA_MONTE_CARLO_MD
+)
+
 load_dotenv()
 
 class ChatbotAPI:
@@ -76,9 +92,6 @@ class ChatbotAPI:
         def ask():
             return self._ask()
 
-        # Like butonu/feedback tamamen kaldırıldı.
-        # Dolayısıyla /feedback route yok.
-
         @self.app.route("/check_session", methods=["GET"])
         def check_session():
             if 'last_activity' in session:
@@ -111,15 +124,63 @@ class ChatbotAPI:
         response_generator = self._generate_response(user_message, user_id)
         return self.app.response_class(response_generator, mimetype="text/plain")
 
+    #
+    # EKLENDİ: Yazım hatalarını düzeltme fonksiyonu
+    #
+    def _correct_typos(self, user_message):
+        """
+        Kullanıcının "premium", "elite", "monte carlo" kelimelerini 
+        %70 benzerlik ile düzeltir.
+        """
+        # 'monte carlo' 2 kelime olduğundan, basit yaklaşımda 
+        # 'monte' ve 'carlo' olarak check edelim, sonra birleştirebiliriz.
+        known_words = ["premium", "elite", "monte", "carlo"]
+
+        splitted = user_message.split()
+        new_tokens = []
+
+        for token in splitted:
+            best = self.utils.fuzzy_find(token, known_words, threshold=0.7)
+            if best:
+                new_tokens.append(best)
+            else:
+                new_tokens.append(token)
+
+        # "monte"+"carlo" => "monte carlo"
+        combined_tokens = []
+        skip_next = False
+
+        for i in range(len(new_tokens)):
+            if skip_next:
+                skip_next = False
+                continue
+
+            if i < len(new_tokens) - 1:
+                if new_tokens[i].lower() == "monte" and new_tokens[i+1].lower() == "carlo":
+                    combined_tokens.append("monte carlo")
+                    skip_next = True
+                else:
+                    combined_tokens.append(new_tokens[i])
+            else:
+                combined_tokens.append(new_tokens[i])
+
+        return " ".join(combined_tokens)
+
     def _generate_response(self, user_message, user_id):
         self.logger.info(f"Kullanıcı ({user_id}) mesajı: {user_message}")
 
         if user_id not in self.user_states:
             self.user_states[user_id] = {}
 
+        # 1) Önce yazım hatalarını düzeltelim
+        corrected_message = self._correct_typos(user_message)
+        self.logger.info(f"Düzeltilmiş mesaj: {corrected_message}")
+        user_message = corrected_message
+
+        # 2) Daha önce atanmış asistan?
         assistant_id = self.user_states[user_id].get("assistant_id", None)
 
-        # Asistan seçimi
+        # Asistan seçimi (yeni bir model adı geçiyorsa override)
         for aid, keywords in self.ASSISTANT_CONFIG.items():
             if any(k.lower() in user_message.lower() for k in keywords):
                 assistant_id = aid
@@ -128,8 +189,82 @@ class ChatbotAPI:
 
         lower_msg = user_message.lower()
 
-        # 0) "evet" + pending_color_images
-        if lower_msg.strip() in ["evet", "evet.", "evet!", "evet?", "evet,"]:
+        # Eklendi: "opsiyonel" geçiyor ama model ismi (kamiq/fabia/scala) geçmiyorsa
+        # ve user_states'te halihazırda assistant_id varsa => 
+        # sanki user "xx model opsiyonel" demiş gibi kabul et.
+        if "opsiyonel" in lower_msg:
+            no_model_mentioned = not any(x in lower_msg for x in ["kamiq", "fabia", "scala"])
+            if no_model_mentioned and assistant_id:
+                model_name = self.ASSISTANT_NAME_MAP.get(assistant_id, "").lower()
+                if model_name in ["kamiq", "fabia", "scala"]:
+                    user_message = f"{model_name} opsiyonel"
+                    lower_msg = user_message.lower()
+
+        # ---------------------------------------------------------
+        # 1) Fabia opsiyonel tablolar
+        # ---------------------------------------------------------
+        if "fabia" in lower_msg and "opsiyonel" in lower_msg:
+            if "premium" in lower_msg:
+                save_to_db(user_id, user_message, "Fabia Premium opsiyonel donanım tablosu döndürüldü.")
+                yield FABIA_PREMIUM_MD.encode("utf-8")
+                return
+            elif "monte carlo" in lower_msg:
+                save_to_db(user_id, user_message, "Fabia Monte Carlo opsiyonel donanım tablosu döndürüldü.")
+                yield FABIA_MONTE_CARLO_MD.encode("utf-8")
+                return
+            else:
+                yield ("Fabia modelinde hangi donanımın opsiyonel bilgilerini görmek istersiniz? "
+                       "(Premium / Monte Carlo)\n").encode("utf-8")
+                return
+
+        # ---------------------------------------------------------
+        # 2) Kamiq opsiyonel tablolar
+        # ---------------------------------------------------------
+        if "kamiq" in lower_msg and "opsiyonel" in lower_msg:
+            if "elite" in lower_msg:
+                save_to_db(user_id, user_message, "Kamiq Elite opsiyonel donanım tablosu döndürüldü.")
+                yield KAMIQ_ELITE_MD.encode("utf-8")
+                return
+            elif "premium" in lower_msg:
+                save_to_db(user_id, user_message, "Kamiq Premium opsiyonel donanım tablosu döndürüldü.")
+                yield KAMIQ_PREMIUM_MD.encode("utf-8")
+                return
+            elif "monte carlo" in lower_msg:
+                save_to_db(user_id, user_message, "Kamiq Monte Carlo opsiyonel donanım tablosu döndürüldü.")
+                yield KAMIQ_MONTE_CARLO_MD.encode("utf-8")
+                return
+            else:
+                yield ("Kamiq modelinde hangi donanımın opsiyonel bilgilerini görmek istersiniz? "
+                       "(Elite / Premium / Monte Carlo)\n").encode("utf-8")
+                return
+
+        # ---------------------------------------------------------
+        # 3) Scala opsiyonel tablolar
+        # ---------------------------------------------------------
+        if "scala" in lower_msg and "opsiyonel" in lower_msg:
+            if "elite" in lower_msg:
+                save_to_db(user_id, user_message, "Scala Elite opsiyonel donanım tablosu döndürüldü.")
+                yield SCALA_ELITE_MD.encode("utf-8")
+                return
+            elif "premium" in lower_msg:
+                save_to_db(user_id, user_message, "Scala Premium opsiyonel donanım tablosu döndürüldü.")
+                yield SCALA_PREMIUM_MD.encode("utf-8")
+                return
+            elif "monte carlo" in lower_msg:
+                save_to_db(user_id, user_message, "Scala Monte Carlo opsiyonel donanım tablosu döndürüldü.")
+                yield SCALA_MONTE_CARLO_MD.encode("utf-8")
+                return
+            else:
+                yield ("Hangi donanım için opsiyonel donanımları görmek istersiniz? "
+                       "(Elite / Premium / Monte Carlo)\n").encode("utf-8")
+                return
+
+        # Asistan adı (renk/görsel vb. logic)
+        assistant_name = self.ASSISTANT_NAME_MAP.get(assistant_id, "")
+        trimmed_msg = user_message.strip().lower()
+
+        # 4) Kullanıcı "evet" derse -> pending_color_images
+        if trimmed_msg in ["evet", "evet.", "evet!", "evet?", "evet,"]:
             pending_colors = self.user_states[user_id].get("pending_color_images", [])
             if pending_colors:
                 asst_name = self.ASSISTANT_NAME_MAP.get(assistant_id, "scala") if assistant_id else "scala"
@@ -164,7 +299,7 @@ class ChatbotAPI:
                 self.user_states[user_id]["pending_color_images"] = []
                 return
 
-        # Özel kontrol: fabia + premium + monte carlo + görsel
+        # 5) Özel kontrol: fabia + premium + monte carlo + görsel karşılaştırma
         if ("fabia" in lower_msg
             and "premium" in lower_msg
             and "monte carlo" in lower_msg
@@ -172,7 +307,7 @@ class ChatbotAPI:
 
             fabia_pairs = [
                 ("Fabia_Premium_Ay_Beyazı.png", "Fabia_Monte_Carlo_Ay_Beyazı.png"),
-                ...
+                # ek eşleştirmeler
             ]
             save_to_db(user_id, user_message, "Fabia + Premium + Monte Carlo karşılaştırma gösterildi.")
             yield "<div style='display: flex; flex-direction: column; gap: 15px;'>".encode("utf-8")
@@ -192,14 +327,13 @@ class ChatbotAPI:
             yield "</div>".encode("utf-8")
             return
 
-        # 2) Görsel isteği?
+        # 6) Görsel isteği mi?
         if self.utils.is_image_request(user_message):
             if not assistant_id:
                 save_to_db(user_id, user_message, "Henüz asistan seçilmedi, görsel yok.")
                 yield "Henüz bir asistan seçilmediği için görsel gösteremiyorum.\n".encode("utf-8")
                 return
 
-            assistant_name = self.ASSISTANT_NAME_MAP.get(assistant_id, "")
             if not assistant_name:
                 save_to_db(user_id, user_message, "Asistan adını bulamadım.")
                 yield "Asistan adını bulamadım.\n".encode("utf-8")
@@ -246,14 +380,13 @@ class ChatbotAPI:
 
             return
 
-        # 3) Normal chat (OpenAI)
+        # 7) Normal Chat (OpenAI)
         if not assistant_id:
             save_to_db(user_id, user_message, "Uygun asistan bulunamadı.")
             yield "Uygun bir asistan bulunamadı.\n".encode("utf-8")
             return
 
         try:
-            # Demo: openai beta.threads
             thread = self.client.beta.threads.create(
                 messages=[{"role": "user", "content": user_message}]
             )
@@ -289,7 +422,6 @@ class ChatbotAPI:
                 yield "Yanıt alma zaman aşımına uğradı.\n".encode("utf-8")
                 return
 
-            # DB'ye normal cevabı kaydet
             save_to_db(user_id, user_message, assistant_response)
 
             if "görsel olarak görmek ister misiniz?" in assistant_response.lower():

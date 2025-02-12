@@ -11,7 +11,7 @@ def create_app():
 
     logger = Utils.setup_logger()
 
-    # ChatbotAPI: Birinci Kod'daki gibi çok parçalı çıkış, veritabanına kayıt vb. entegre
+    # ChatbotAPI: Çok parçalı çıktı, veritabanına kayıt, tablo-parçalama vb.
     chatbot = ChatbotAPI(
         logger=logger,
         static_folder="static",
