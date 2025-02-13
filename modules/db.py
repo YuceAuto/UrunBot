@@ -31,12 +31,23 @@ def create_tables():
     conn.close()
 
 def save_to_db(user_id, question, answer, customer_answer=0):
+    """
+    Debug satırları eklendi
+    """
+    logging.info("[DEBUG] save_to_db called with ->")
+    logging.info(f"user_id: {user_id} (type={type(user_id)})")
+    logging.info(f"question: {question} (type={type(question)})")
+    logging.info(f"answer: {answer} (type={type(answer)})")
+    logging.info(f"customer_answer: {customer_answer} (type={type(customer_answer)})")
+
     conn = get_db_connection()
     cursor = conn.cursor()
+
     cursor.execute('''
         INSERT INTO conversations (user_id, question, answer, customer_answer)
         VALUES (?, ?, ?, ?)
     ''', (user_id, question, answer, customer_answer))
+
     conn.commit()
     conn.close()
 
