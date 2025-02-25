@@ -37,7 +37,6 @@ from modules.fabia_data import (
 
 load_dotenv()
 
-
 class ChatbotAPI:
     def __init__(self, logger=None, static_folder='static', template_folder='templates'):
         # Flask yapılandırması
@@ -154,12 +153,10 @@ class ChatbotAPI:
 
         self.logger.info("Background DB writer thread stopped.")
 
-    # ----------------------------------------------------------------
     # (Opsiyonel) DB'den cache yükleme metodu
-    # ----------------------------------------------------------------
     def _load_cache_from_db(self):
         """
-        İsterseniz DB'den cache verisi çekip self.fuzzy_cache'e doldurabilirsiniz.
+        Dilerseniz DB'den son X kaydı çekip self.fuzzy_cache'e doldurabilirsiniz.
         """
         self.logger.info("[_load_cache_from_db] Cache verileri DB'den yükleniyor...")
 
@@ -179,7 +176,7 @@ class ChatbotAPI:
             q_lower = row[1]
             ans_txt = row[2]
             ans_bytes = ans_txt.encode("utf-8")
-            assistant_id = "default"  # DB'de asistan kimliği yoksa
+            assistant_id = "default"
 
             if user_id not in self.fuzzy_cache:
                 self.fuzzy_cache[user_id] = {}
@@ -195,9 +192,12 @@ class ChatbotAPI:
         self.logger.info("[_load_cache_from_db] Tamamlandı.")
 
     # ----------------------------------------------------------------
-    # MODELLERİ TESPİT
+    # MODELLER VE ASİSTANLAR
     # ----------------------------------------------------------------
     def _extract_models(self, text: str) -> set:
+        """
+        Metin içinde 'fabia', 'scala' veya 'kamiq' geçiyorsa set halinde döndürür.
+        """
         lower_t = text.lower()
         models = set()
         if "fabia" in lower_t:
@@ -208,13 +208,25 @@ class ChatbotAPI:
             models.add("kamiq")
         return models
 
+    def _assistant_id_from_model_name(self, model_name: str):
+        """
+        'fabia' / 'kamiq' / 'scala' -> ilgili asistan_id (self.ASSISTANT_CONFIG içinden).
+        Bulunamazsa None döner.
+        """
+        model_name = model_name.lower()
+        for asst_id, keywords in self.ASSISTANT_CONFIG.items():
+            for kw in keywords:
+                if kw.lower() == model_name:
+                    return asst_id
+        return None
+
     # ----------------------------------------------------------------
     # FUZZY CACHE - ARAMA VE KAYDETME
     # ----------------------------------------------------------------
     def _search_in_assistant_cache(self, user_id, assistant_id, new_question, threshold):
         """
-        Belirli assistant_id'nin önbelleğinde 'new_question'a benzer bir soru arar.
-        Dönüş: (answer_bytes, matched_question, found_asst_id) veya (None, None, None)
+        assistant_id'nin önbelleğinde new_question'a benzer bir soru arar.
+        Return: (answer_bytes, matched_question, found_asst_id) ya da (None, None, None).
         """
         if not assistant_id:
             return None, None, None
@@ -245,29 +257,28 @@ class ChatbotAPI:
 
         return None, None, None
 
-    # YENİ: allow_cross_assistant parametresi ekliyoruz.
     def _find_fuzzy_cached_answer(
-        self, 
-        user_id: str, 
-        new_question: str, 
-        assistant_id: str, 
-        threshold=0.8, 
-        allow_cross_assistant=True  # varsayılan True
+        self,
+        user_id: str,
+        new_question: str,
+        assistant_id: str,
+        threshold=0.8,
+        allow_cross_assistant=True  # YENİ parametre
     ):
         """
-        Belirlenen asistanın önbelleğinde arar. CROSS_ASSISTANT_CACHE=True ise
-        (ve allow_cross_assistant=True ise) diğer asistanların önbelleğini de tarar.
+        assistant_id'nin önbelleğinde arar. CROSS_ASSISTANT_CACHE=True ise ve allow_cross_assistant=True ise
+        diğer asistanların önbelleğini de tarar.
 
-        Dönüş: (answer_bytes, matched_question, found_asst_id) veya (None, None, None)
+        Return: (answer_bytes, matched_question, found_asst_id) veya (None, None, None)
         """
-        # 1) Önce ilgili asistan
+        # 1) İlgili asistan cache
         ans, matched_q, found_aid = self._search_in_assistant_cache(
             user_id, assistant_id, new_question, threshold
         )
         if ans:
             return ans, matched_q, found_aid
 
-        # 2) Cross-assistant arama
+        # 2) cross-assistant
         if allow_cross_assistant and self.CROSS_ASSISTANT_CACHE and user_id in self.fuzzy_cache:
             for other_aid in self.fuzzy_cache[user_id]:
                 if other_aid == assistant_id:
@@ -324,23 +335,23 @@ class ChatbotAPI:
         else:
             session['last_activity'] = time.time()
 
-        # 1) Yazım hatalarını düzelt
+        # 1) Yazım hatası düzelt
         corrected_message = self._correct_typos(user_message)
         lower_corrected = corrected_message.lower()
 
-        # 2) Daha önce asistan var mıydı?
+        # 2) Eski asistan
         old_assistant_id = None
         if user_id in self.user_states:
             old_assistant_id = self.user_states[user_id].get("assistant_id")
 
-        # 3) Mesajda model adı var mı? (Fabia, Kamiq, Scala vb.)
+        # 3) Yeni model adı var mı?
         new_assistant_id = None
         for aid, keywords in self.ASSISTANT_CONFIG.items():
             if any(k.lower() in lower_corrected for k in keywords):
                 new_assistant_id = aid
                 break
 
-        # YENİ: Kullanıcı model belirtmediyse cross-assistant kapat
+        # Kullanıcı model belirtmezse cross-assistant kapat
         if new_assistant_id:
             assistant_id = new_assistant_id
             allow_cross = True
@@ -348,32 +359,44 @@ class ChatbotAPI:
             assistant_id = old_assistant_id
             allow_cross = False
 
-        # user_states'e kaydet
         if user_id not in self.user_states:
             self.user_states[user_id] = {}
         self.user_states[user_id]["assistant_id"] = assistant_id
 
         # 4) Önbellek araması
         cached_answer, matched_question, found_asst_id = self._find_fuzzy_cached_answer(
-            user_id, 
-            corrected_message, 
-            assistant_id, 
+            user_id,
+            corrected_message,
+            assistant_id,
             threshold=0.8,
-            allow_cross_assistant=allow_cross  # YENİ parametre
+            allow_cross_assistant=allow_cross
         )
 
         if cached_answer:
-            # MODEL MİSMATCH KONTROLÜ
+            # 4a) Model mismatch kontrolü
             user_models = self._extract_models(corrected_message)
             cache_models = self._extract_models(matched_question) if matched_question else set()
 
             if user_models and not user_models.issubset(cache_models):
                 self.logger.info("Model uyuşmazlığı -> cache'i atlıyoruz.")
-                # Cache cevabını bypass edip generate_response'a devam
+                # Cache bypass
             else:
-                # Eğer cross-assistant'tan geldiyse found_asst_id'yi güncelle
+                # 4b) Asistan cross-assistant'tan geldiyse
                 if found_asst_id:
                     self.user_states[user_id]["assistant_id"] = found_asst_id
+
+                # YENİ: Cache cevabının kendisinde (metninde) hangi model(ler) var?
+                answer_text = cached_answer.decode("utf-8")
+                models_in_answer = self._extract_models(answer_text)
+                if len(models_in_answer) == 1:
+                    # Tek model => otomatik asistan geçişi
+                    only_model = list(models_in_answer)[0]
+                    new_aid = self._assistant_id_from_model_name(only_model)
+                    if new_aid:
+                        self.logger.info(f"[CACHE] Cevapta tek model: {only_model}, asistan = {new_aid}")
+                        self.user_states[user_id]["assistant_id"] = new_aid
+                elif len(models_in_answer) > 1:
+                    self.logger.info("[CACHE] Cevapta birden çok model var, asistan atamasını es geçiyorum.")
 
                 self.logger.info("Fuzzy cache match bulundu, önbellekten yanıt dönüyor.")
                 time.sleep(2)
@@ -393,7 +416,7 @@ class ChatbotAPI:
         return self.app.response_class(caching_generator(), mimetype="text/plain")
 
     # ----------------------------------------------------------------
-    # TİPO DÜZELTMESİ
+    # BASİT TİPO DÜZELTMESİ
     # ----------------------------------------------------------------
     def _correct_typos(self, user_message):
         known_words = ["premium", "elite", "monte", "carlo"]
