@@ -3,9 +3,9 @@ import time
 import logging
 import re
 import openai
-import difflib  # Fuzzy matching
-import queue    # Kuyruğumuz için
-import threading  # Arka plan worker
+import difflib
+import queue
+import threading
 
 from flask import Flask, request, jsonify, render_template, session
 from flask_cors import CORS
@@ -37,6 +37,7 @@ from modules.fabia_data import (
 
 load_dotenv()
 
+
 class ChatbotAPI:
     def __init__(self, logger=None, static_folder='static', template_folder='templates'):
         # Flask yapılandırması
@@ -46,8 +47,8 @@ class ChatbotAPI:
             template_folder=os.path.join(os.getcwd(), template_folder)
         )
         CORS(self.app)
-
         self.app.secret_key = secrets.token_hex(16)
+
         self.logger = logger if logger else self._setup_logger()
 
         # MSSQL tabloyu oluşturma
@@ -71,23 +72,22 @@ class ChatbotAPI:
         # Session timeout (30 dakika)
         self.SESSION_TIMEOUT = 30 * 60
 
-        # Kullanıcı bazlı state: user_states => { user_id: {...} }
+        # Kullanıcı bazlı state
         self.user_states = {}
 
         # ----- Fuzzy Cache ve Queue -----
-        # user_id -> list of { "question": str, "answer_bytes": bytes }
         self.fuzzy_cache = {}
-
-        # DB'ye kaydı arka planda yapmak için FIFO kuyruk
         self.fuzzy_cache_queue = queue.Queue()
 
-        # Arka plan worker thread kontrolü
         self.stop_worker = False
         self.worker_thread = threading.Thread(target=self._background_db_writer, daemon=True)
         self.worker_thread.start()
 
-        # (Opsiyonel) DB'den önbelleğe veri yükleme
-        # self._load_cache_from_db()
+        # Önbellekteki cevabın geçerli kalma süresi (örnek: 1 saat)
+        self.CACHE_EXPIRY_SECONDS = 3600
+
+        # Cross-assistant cache devrede
+        self.CROSS_ASSISTANT_CACHE = True
 
         # Flask route tanımları
         self._define_routes()
@@ -105,7 +105,6 @@ class ChatbotAPI:
     def _define_routes(self):
         @self.app.route("/", methods=["GET"])
         def home():
-            # Session reset
             session.pop('last_activity', None)
             return render_template("index.html")
 
@@ -125,24 +124,17 @@ class ChatbotAPI:
     # ARKA PLANDA DB'YE YAZAN THREAD
     # ----------------------------------------------------------------
     def _background_db_writer(self):
-        """
-        Kuyruğa eklenen (user_id, question, answer_bytes, tstamp) kayıtlarını
-        arka planda DB'ye yazan worker.
-        """
+        """Queue'ya eklenen cache kayıtlarını DB'ye yazar."""
         self.logger.info("Background DB writer thread started.")
         while not self.stop_worker:
             try:
-                record = self.fuzzy_cache_queue.get(timeout=5.0)  # 5 sn bekliyor
+                record = self.fuzzy_cache_queue.get(timeout=5.0)
                 if record is None:
                     continue
                 (user_id, q_lower, ans_bytes, tstamp) = record
 
-                # DB bağlantısı al
                 conn = get_db_connection()
                 cursor = conn.cursor()
-
-                # Örnek tablo: cache_faq (id, user_id, question, answer, created_at)
-                # created_at otomatik DATETIME veya GETDATE() vb. olabilir.
                 sql = """
                 INSERT INTO cache_faq (user_id, question, answer, created_at)
                 VALUES (?, ?, ?, GETDATE())
@@ -155,7 +147,6 @@ class ChatbotAPI:
                 self.fuzzy_cache_queue.task_done()
 
             except queue.Empty:
-                # Süre doldu, yeni kayıt yok, tekrar dene
                 pass
             except Exception as e:
                 self.logger.error(f"[BACKGROUND] DB yazma hatası: {str(e)}")
@@ -163,15 +154,17 @@ class ChatbotAPI:
 
         self.logger.info("Background DB writer thread stopped.")
 
+    # ----------------------------------------------------------------
+    # (Opsiyonel) DB'den cache yükleme metodu
+    # ----------------------------------------------------------------
     def _load_cache_from_db(self):
         """
-        (Opsiyonel) Uygulama açılırken DB'den son X kaydı çekip, fuzzy_cache'e yükleyebilirsiniz.
+        İsterseniz DB'den cache verisi çekip self.fuzzy_cache'e doldurabilirsiniz.
         """
         self.logger.info("[_load_cache_from_db] Cache verileri DB'den yükleniyor...")
 
         conn = get_db_connection()
         cursor = conn.cursor()
-        # Son 1000 kaydı alalım
         sql = """
         SELECT TOP 1000 user_id, question, answer
         FROM cache_faq
@@ -186,57 +179,124 @@ class ChatbotAPI:
             q_lower = row[1]
             ans_txt = row[2]
             ans_bytes = ans_txt.encode("utf-8")
+            assistant_id = "default"  # DB'de asistan kimliği yoksa
 
             if user_id not in self.fuzzy_cache:
-                self.fuzzy_cache[user_id] = []
-            self.fuzzy_cache[user_id].append({
+                self.fuzzy_cache[user_id] = {}
+            if assistant_id not in self.fuzzy_cache[user_id]:
+                self.fuzzy_cache[user_id][assistant_id] = []
+
+            self.fuzzy_cache[user_id][assistant_id].append({
                 "question": q_lower,
-                "answer_bytes": ans_bytes
+                "answer_bytes": ans_bytes,
+                "timestamp": time.time()
             })
 
         self.logger.info("[_load_cache_from_db] Tamamlandı.")
 
     # ----------------------------------------------------------------
-    # FUZZY CACHE İŞLEMLERİ
+    # MODELLERİ TESPİT
     # ----------------------------------------------------------------
-    def _find_fuzzy_cached_answer(self, user_id: str, new_question: str, threshold=0.8):
+    def _extract_models(self, text: str) -> set:
+        lower_t = text.lower()
+        models = set()
+        if "fabia" in lower_t:
+            models.add("fabia")
+        if "scala" in lower_t:
+            models.add("scala")
+        if "kamiq" in lower_t:
+            models.add("kamiq")
+        return models
+
+    # ----------------------------------------------------------------
+    # FUZZY CACHE - ARAMA VE KAYDETME
+    # ----------------------------------------------------------------
+    def _search_in_assistant_cache(self, user_id, assistant_id, new_question, threshold):
         """
-        Soru benzerliğini arar. Yakın bir eşleşme varsa, answer_bytes'ı döndürür.
-        Yoksa None döner.
+        Belirli assistant_id'nin önbelleğinde 'new_question'a benzer bir soru arar.
+        Dönüş: (answer_bytes, matched_question, found_asst_id) veya (None, None, None)
         """
+        if not assistant_id:
+            return None, None, None
         if user_id not in self.fuzzy_cache:
-            return None
+            return None, None, None
+        if assistant_id not in self.fuzzy_cache[user_id]:
+            return None, None, None
 
         new_q_lower = new_question.strip().lower()
+        now = time.time()
         best_ratio = 0.0
         best_answer = None
+        best_question = None
 
-        for item in self.fuzzy_cache[user_id]:
-            old_q = item["question"]  # lower saklıyoruz
+        for item in self.fuzzy_cache[user_id][assistant_id]:
+            if (now - item["timestamp"]) > self.CACHE_EXPIRY_SECONDS:
+                continue
+
+            old_q = item["question"]
             ratio = difflib.SequenceMatcher(None, new_q_lower, old_q).ratio()
             if ratio > best_ratio:
                 best_ratio = ratio
                 best_answer = item["answer_bytes"]
+                best_question = old_q
 
         if best_ratio >= threshold:
-            return best_answer
-        return None
+            return best_answer, best_question, assistant_id
 
-    def _store_in_fuzzy_cache(self, user_id: str, question: str, answer_bytes: bytes):
+        return None, None, None
+
+    # YENİ: allow_cross_assistant parametresi ekliyoruz.
+    def _find_fuzzy_cached_answer(
+        self, 
+        user_id: str, 
+        new_question: str, 
+        assistant_id: str, 
+        threshold=0.8, 
+        allow_cross_assistant=True  # varsayılan True
+    ):
         """
-        Yanıtı bellek (self.fuzzy_cache) içine ekler, ardından DB'ye
-        yazması için self.fuzzy_cache_queue'ye gönderir.
+        Belirlenen asistanın önbelleğinde arar. CROSS_ASSISTANT_CACHE=True ise
+        (ve allow_cross_assistant=True ise) diğer asistanların önbelleğini de tarar.
+
+        Dönüş: (answer_bytes, matched_question, found_asst_id) veya (None, None, None)
         """
+        # 1) Önce ilgili asistan
+        ans, matched_q, found_aid = self._search_in_assistant_cache(
+            user_id, assistant_id, new_question, threshold
+        )
+        if ans:
+            return ans, matched_q, found_aid
+
+        # 2) Cross-assistant arama
+        if allow_cross_assistant and self.CROSS_ASSISTANT_CACHE and user_id in self.fuzzy_cache:
+            for other_aid in self.fuzzy_cache[user_id]:
+                if other_aid == assistant_id:
+                    continue
+                ans2, matched_q2, found_aid2 = self._search_in_assistant_cache(
+                    user_id, other_aid, new_question, threshold
+                )
+                if ans2:
+                    self.logger.info(f"Cross-assistant cache match! (asistan: {other_aid})")
+                    return ans2, matched_q2, found_aid2
+
+        return None, None, None
+
+    def _store_in_fuzzy_cache(self, user_id: str, question: str, answer_bytes: bytes, assistant_id: str):
+        if not assistant_id:
+            return
+
         q_lower = question.strip().lower()
         if user_id not in self.fuzzy_cache:
-            self.fuzzy_cache[user_id] = []
+            self.fuzzy_cache[user_id] = {}
+        if assistant_id not in self.fuzzy_cache[user_id]:
+            self.fuzzy_cache[user_id][assistant_id] = []
 
-        self.fuzzy_cache[user_id].append({
+        self.fuzzy_cache[user_id][assistant_id].append({
             "question": q_lower,
-            "answer_bytes": answer_bytes
+            "answer_bytes": answer_bytes,
+            "timestamp": time.time()
         })
 
-        # Kuyruğa da ekle
         record = (user_id, q_lower, answer_bytes, time.time())
         self.fuzzy_cache_queue.put(record)
 
@@ -244,9 +304,6 @@ class ChatbotAPI:
     # /ask ENDPOINT
     # ----------------------------------------------------------------
     def _ask(self):
-        """
-        /ask endpoint -> Kullanıcı sorusu -> Fuzzy cache kontrolü -> Gerekirse OpenAI/Tablo.
-        """
         try:
             data = request.get_json()
             if not data:
@@ -261,44 +318,87 @@ class ChatbotAPI:
         if not user_message:
             return jsonify({"response": "Please enter a question."})
 
-        # Session aktivite güncellemesi
+        # Session güncelleme
         if 'last_activity' not in session:
             session['last_activity'] = time.time()
         else:
             session['last_activity'] = time.time()
 
-        # 1) Fuzzy cache'te var mı diye kontrol
-        cached_answer = self._find_fuzzy_cached_answer(user_id, user_message, threshold=0.8)
-        if cached_answer:
-            self.logger.info("Fuzzy cache match bulundu, önbellekten yanıt dönüyor.")
-            return self.app.response_class(cached_answer, mimetype="text/plain")
+        # 1) Yazım hatalarını düzelt
+        corrected_message = self._correct_typos(user_message)
+        lower_corrected = corrected_message.lower()
 
-        # 2) Yoksa cevap üret (generator). Bittiğinde cache'e ekle.
+        # 2) Daha önce asistan var mıydı?
+        old_assistant_id = None
+        if user_id in self.user_states:
+            old_assistant_id = self.user_states[user_id].get("assistant_id")
+
+        # 3) Mesajda model adı var mı? (Fabia, Kamiq, Scala vb.)
+        new_assistant_id = None
+        for aid, keywords in self.ASSISTANT_CONFIG.items():
+            if any(k.lower() in lower_corrected for k in keywords):
+                new_assistant_id = aid
+                break
+
+        # YENİ: Kullanıcı model belirtmediyse cross-assistant kapat
+        if new_assistant_id:
+            assistant_id = new_assistant_id
+            allow_cross = True
+        else:
+            assistant_id = old_assistant_id
+            allow_cross = False
+
+        # user_states'e kaydet
+        if user_id not in self.user_states:
+            self.user_states[user_id] = {}
+        self.user_states[user_id]["assistant_id"] = assistant_id
+
+        # 4) Önbellek araması
+        cached_answer, matched_question, found_asst_id = self._find_fuzzy_cached_answer(
+            user_id, 
+            corrected_message, 
+            assistant_id, 
+            threshold=0.8,
+            allow_cross_assistant=allow_cross  # YENİ parametre
+        )
+
+        if cached_answer:
+            # MODEL MİSMATCH KONTROLÜ
+            user_models = self._extract_models(corrected_message)
+            cache_models = self._extract_models(matched_question) if matched_question else set()
+
+            if user_models and not user_models.issubset(cache_models):
+                self.logger.info("Model uyuşmazlığı -> cache'i atlıyoruz.")
+                # Cache cevabını bypass edip generate_response'a devam
+            else:
+                # Eğer cross-assistant'tan geldiyse found_asst_id'yi güncelle
+                if found_asst_id:
+                    self.user_states[user_id]["assistant_id"] = found_asst_id
+
+                self.logger.info("Fuzzy cache match bulundu, önbellekten yanıt dönüyor.")
+                time.sleep(2)
+                return self.app.response_class(cached_answer, mimetype="text/plain")
+
+        # 5) Yoksa yeni yanıt üret
         def caching_generator():
             chunks = []
-            for chunk in self._generate_response(user_message, user_id):
+            for chunk in self._generate_response(corrected_message, user_id):
                 chunks.append(chunk)
                 yield chunk
 
-            # Cevap parçaları bitti -> birleştirip cache'e yaz
             final_bytes = b"".join(chunks)
-            self._store_in_fuzzy_cache(user_id, user_message, final_bytes)
+            final_aid = self.user_states[user_id].get("assistant_id", assistant_id)
+            self._store_in_fuzzy_cache(user_id, corrected_message, final_bytes, final_aid)
 
         return self.app.response_class(caching_generator(), mimetype="text/plain")
 
     # ----------------------------------------------------------------
-    # MESAJI DÜZELTME FONKSİYONU (TYPO CORRECTION)
+    # TİPO DÜZELTMESİ
     # ----------------------------------------------------------------
     def _correct_typos(self, user_message):
-        """
-        Kullanıcının "premium", "elite", "monte carlo" kelimelerini 
-        %70 benzerlik ile düzelten örnek fonksiyon.
-        """
         known_words = ["premium", "elite", "monte", "carlo"]
-
         splitted = user_message.split()
         new_tokens = []
-
         for token in splitted:
             best = self.utils.fuzzy_find(token, known_words, threshold=0.7)
             if best:
@@ -313,7 +413,6 @@ class ChatbotAPI:
             if skip_next:
                 skip_next = False
                 continue
-
             if i < len(new_tokens) - 1:
                 if new_tokens[i].lower() == "monte" and new_tokens[i+1].lower() == "carlo":
                     combined_tokens.append("monte carlo")
@@ -322,54 +421,19 @@ class ChatbotAPI:
                     combined_tokens.append(new_tokens[i])
             else:
                 combined_tokens.append(new_tokens[i])
-
         return " ".join(combined_tokens)
 
     # ----------------------------------------------------------------
-    # CEVAP OLUŞTURMA (GENERATOR)
+    # YANIT ÜRETME (TABLO, GÖRSEL, OPENAI vb.)
     # ----------------------------------------------------------------
     def _generate_response(self, user_message, user_id):
-        """
-        Mevcut chatbot mantığınız: 
-        - Yazım hatası düzeltme
-        - Opsiyonel tablo kontrolü
-        - Görsel istekleri
-        - OpenAI (multi-turn) vb.
-        """
         self.logger.info(f"[_generate_response] Kullanıcı ({user_id}): {user_message}")
 
-        # user_states içinde yoksa ekliyoruz
-        if user_id not in self.user_states:
-            self.user_states[user_id] = {}
-
-        # 1) Yazım hatalarını düzelt
-        corrected_message = self._correct_typos(user_message)
-        user_message = corrected_message
+        assistant_id = self.user_states[user_id].get("assistant_id", None)
+        assistant_name = self.ASSISTANT_NAME_MAP.get(assistant_id, "")
         lower_msg = user_message.lower()
 
-        # 2) Assistant seçimi (model tayini)
-        assistant_id = self.user_states[user_id].get("assistant_id", None)
-
-        # Asistan konfigürasyonunda tanımlı anahtar kelimeler geçiyorsa assistant_id güncelle
-        for aid, keywords in self.ASSISTANT_CONFIG.items():
-            if any(k.lower() in lower_msg for k in keywords):
-                assistant_id = aid
-                self.user_states[user_id]["assistant_id"] = assistant_id
-                break
-
-        # "opsiyonel" geçiyor ama model belirtilmemiş ve user_states'te assistant_id varsa
-        if "opsiyonel" in lower_msg:
-            no_model_mentioned = not any(x in lower_msg for x in ["kamiq", "fabia", "scala"])
-            if no_model_mentioned and assistant_id:
-                model_name = self.ASSISTANT_NAME_MAP.get(assistant_id, "").lower()
-                if model_name in ["kamiq", "fabia", "scala"]:
-                    user_message = f"{model_name} opsiyonel"
-                    lower_msg = user_message.lower()
-
-        #
-        # -------------- OPSİYONEL TABLOLAR --------------
-        #
-        # 1) Fabia
+        # 1) Opsiyonel tablolar (Fabia)
         if "fabia" in lower_msg and "opsiyonel" in lower_msg:
             if "premium" in lower_msg:
                 save_to_db(user_id, user_message, "Fabia Premium opsiyonel tablosu.")
@@ -380,13 +444,11 @@ class ChatbotAPI:
                 yield FABIA_MONTE_CARLO_MD.encode("utf-8")
                 return
             else:
-                yield (
-                    "Fabia modelinde hangi donanımın opsiyonel bilgilerini görmek istersiniz? "
-                    "(Premium / Monte Carlo)\n"
-                ).encode("utf-8")
+                yield ("Fabia modelinde hangi donanımın opsiyonel bilgilerini görmek istersiniz? "
+                       "(Premium / Monte Carlo)\n").encode("utf-8")
                 return
 
-        # 2) Kamiq
+        # 2) Opsiyonel tablolar (Kamiq)
         if "kamiq" in lower_msg and "opsiyonel" in lower_msg:
             if "elite" in lower_msg:
                 save_to_db(user_id, user_message, "Kamiq Elite opsiyonel tablosu.")
@@ -401,13 +463,11 @@ class ChatbotAPI:
                 yield KAMIQ_MONTE_CARLO_MD.encode("utf-8")
                 return
             else:
-                yield (
-                    "Kamiq modelinde hangi donanımın opsiyonel bilgilerini görmek istersiniz? "
-                    "(Elite / Premium / Monte Carlo)\n"
-                ).encode("utf-8")
+                yield ("Kamiq modelinde hangi donanımın opsiyonel bilgilerini görmek istersiniz? "
+                       "(Elite / Premium / Monte Carlo)\n").encode("utf-8")
                 return
 
-        # 3) Scala
+        # 3) Opsiyonel tablolar (Scala)
         if "scala" in lower_msg and "opsiyonel" in lower_msg:
             if "elite" in lower_msg:
                 save_to_db(user_id, user_message, "Scala Elite opsiyonel tablosu.")
@@ -422,17 +482,12 @@ class ChatbotAPI:
                 yield SCALA_MONTE_CARLO_MD.encode("utf-8")
                 return
             else:
-                yield (
-                    "Scala modelinde hangi donanımın opsiyonel bilgilerini görmek istersiniz? "
-                    "(Elite / Premium / Monte Carlo)\n"
-                ).encode("utf-8")
+                yield ("Scala modelinde hangi donanımın opsiyonel bilgilerini görmek istersiniz? "
+                       "(Elite / Premium / Monte Carlo)\n").encode("utf-8")
                 return
 
-        # Asistan adı
-        assistant_name = self.ASSISTANT_NAME_MAP.get(assistant_id, "")
+        # 4) "Evet" kontrolü -> pending_color_images
         trimmed_msg = user_message.strip().lower()
-
-        # "evet" kontrolü -> pending_color_images
         if trimmed_msg in ["evet", "evet.", "evet!", "evet?", "evet,"]:
             pending_colors = self.user_states[user_id].get("pending_color_images", [])
             if pending_colors:
@@ -444,7 +499,6 @@ class ChatbotAPI:
                     results = self.image_manager.filter_images_multi_keywords(keywords)
                     all_found_images.extend(results)
 
-                # Sıralama (utils.multi_group_sort)
                 if asst_name == "scala":
                     sorted_images = self.utils.multi_group_sort(all_found_images, "scala_custom")
                 elif asst_name == "kamiq":
@@ -459,7 +513,6 @@ class ChatbotAPI:
 
                 save_to_db(user_id, user_message, "Renk görselleri listelendi (evet).")
                 yield "<b>İşte seçtiğiniz renk görselleri:</b><br>".encode("utf-8")
-
                 for img_file in sorted_images:
                     img_url = f"/static/images/{img_file}"
                     base_name, _ = os.path.splitext(img_file)
@@ -467,22 +520,17 @@ class ChatbotAPI:
                     yield f"<h4>{pretty_name}</h4>\n".encode("utf-8")
                     yield f'<img src="{img_url}" alt="{pretty_name}" style="max-width:300px; margin:5px;" />\n'.encode("utf-8")
 
-                # İş bittikten sonra pending temizle
                 self.user_states[user_id]["pending_color_images"] = []
                 return
 
-        # Özel case: Fabia + Premium + Monte Carlo + görsel karşılaştırma
+        # 5) Özel case: Fabia Premium vs Monte Carlo görsel karşılaştırma
         if ("fabia" in lower_msg
             and "premium" in lower_msg
             and "monte carlo" in lower_msg
             and self.utils.is_image_request(user_message)):
-
-            # Örnek resim çiftleri
             fabia_pairs = [
                 ("Fabia_Premium_Ay_Beyazı.png", "Fabia_Monte_Carlo_Ay_Beyazı.png"),
-                # İsterseniz ek resim çiftleri ekleyebilirsiniz...
             ]
-
             save_to_db(user_id, user_message, "Fabia Premium vs Monte Carlo görsel karşılaştırma.")
             yield "<div style='display: flex; flex-direction: column; gap: 15px;'>".encode("utf-8")
             for left_img, right_img in fabia_pairs:
@@ -525,7 +573,7 @@ class ChatbotAPI:
                 yield f"'{full_filter}' için uygun bir görsel bulamadım.\n".encode("utf-8")
                 return
 
-            # Gruplama seçimi
+            # Gruplama
             if "scala görsel" in lower_msg:
                 desired_group = "scala_custom"
             elif "kamiq görsel" in lower_msg:
@@ -545,33 +593,29 @@ class ChatbotAPI:
 
             sorted_images = self.utils.multi_group_sort(found_images, desired_group)
             save_to_db(user_id, user_message, f"{len(sorted_images)} görsel bulundu ve listelendi.")
-
             for img_file in sorted_images:
                 img_url = f"/static/images/{img_file}"
                 base_name, _ = os.path.splitext(img_file)
                 pretty_name = base_name.replace("_", " ")
                 yield f"<h4>{pretty_name}</h4>\n".encode("utf-8")
                 yield f'<img src="{img_url}" alt="{pretty_name}" style="max-width:300px; margin:5px;" />\n'.encode("utf-8")
-
             return
 
-        # 7) Normal Chat (OpenAI) => Multi-turn
+        # 7) Normal Chat (OpenAI)
         if not assistant_id:
             save_to_db(user_id, user_message, "Uygun asistan bulunamadı.")
             yield "Uygun bir asistan bulunamadı.\n".encode("utf-8")
             return
 
         try:
-            # user_states içinde thread_id var mı?
+            # Çoklu konuşma (multi-turn) mantığı
             if "thread_id" not in self.user_states[user_id]:
-                # Yoksa yeni bir thread
                 new_thread = self.client.beta.threads.create(
                     messages=[{"role": "user", "content": user_message}]
                 )
                 thread_id = new_thread.id
                 self.user_states[user_id]["thread_id"] = thread_id
             else:
-                # Varsa, mevcut thread_id üzerinde yeni mesaj
                 thread_id = self.user_states[user_id]["thread_id"]
                 self.client.beta.threads.messages.create(
                     thread_id=thread_id,
@@ -589,10 +633,7 @@ class ChatbotAPI:
             assistant_response = ""
 
             while time.time() - start_time < timeout:
-                run = self.client.beta.threads.runs.retrieve(
-                    thread_id=thread_id,
-                    run_id=run.id
-                )
+                run = self.client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
                 if run.status == "completed":
                     msg_response = self.client.beta.threads.messages.list(thread_id=thread_id)
                     for msg in msg_response.data:
@@ -606,7 +647,6 @@ class ChatbotAPI:
                     save_to_db(user_id, user_message, "Yanıt oluşturulamadı.")
                     yield "Yanıt oluşturulamadı.\n".encode("utf-8")
                     return
-
                 time.sleep(0.5)
 
             if not assistant_response:
@@ -614,11 +654,10 @@ class ChatbotAPI:
                 yield "Yanıt alma zaman aşımına uğradı.\n".encode("utf-8")
                 return
 
-            # Mesajı DB'ye kaydet
+            # DB'ye kaydet
             save_to_db(user_id, user_message, assistant_response)
 
-            # Asistan cevabında "görsel olarak görmek ister misiniz?" geçiyorsa
-            # Renk yakalama
+            # Renk varsa pending_color_images'e kaydet
             if "görsel olarak görmek ister misiniz?" in assistant_response.lower():
                 detected_colors = self.utils.parse_color_names(assistant_response)
                 if detected_colors:
@@ -633,9 +672,6 @@ class ChatbotAPI:
         self.app.run(debug=debug)
 
     def shutdown(self):
-        """
-        Uygulama kapanırken background thread'i durdurur.
-        """
         self.stop_worker = True
         self.worker_thread.join(5.0)
         self.logger.info("ChatbotAPI shutdown complete.")

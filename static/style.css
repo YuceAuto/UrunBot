@@ -1,36 +1,46 @@
-/* Body / HTML tam ekran + gradyan arka plan */
+/* Body ve HTML - Tam ekran yüksekliği iptal, arka plan gradyan korunuyor */
 body, html {
   margin: 0;
   padding: 0;
-  height: 100%;
   background: #6F797A;
   background: -webkit-linear-gradient(to right, #0E3A2F, #78FAAE);
   background: linear-gradient(to right, #0E3A2F, #78FAAE);
 }
 
-.container-fluid, .row.justify-content-center.h-100 {
-  height: 100vh;
+/* container-fluid ve row: Tam yükseklik + flex iptal, sadece ortalama */
+.container-fluid {
+  margin: 0 auto;
+  padding: 0;
+}
+
+.row.justify-content-center.h-100 {
+  /* height: 100vh; flex: ... vs. kaldırıldı */
   display: flex;
-  flex-direction: column;
-  align-items: center;
   justify-content: center;
+  align-items: center;
+  margin: 20px auto;
 }
+
+/* Chat kutusu sabit boyut */
 .chat {
-  flex: 1;
+  width: 1400px;     /* Sabit genişlik (değiştirebilirsiniz) */
+  height: 800px;    /* Sabit yükseklik (değiştirebilirsiniz) */
   display: flex;
   flex-direction: column;
-  max-width: 95%;
-  min-width: 760px;
-  height: 100%;
+  border-radius: 15px;
 }
+
+/* Kart, chat alanını tam doldurur */
 .card {
   flex: 1;
   display: flex;
   flex-direction: column;
   height: 100%;
   border-radius: 15px !important;
-  background-color: #000000 !important; 
+  background-color: #000000 !important;
 }
+
+/* Header (üst kısım) */
 .card-header.msg_head {
   display: flex;
   align-items: center;
@@ -39,17 +49,21 @@ body, html {
   border-radius: 15px 15px 0 0 !important;
   border-bottom: 0 !important;
 }
+
+/* Footer (mesaj yazma alanı) */
 .card-footer {
   border-radius: 0 0 15px 15px !important;
   border-top: 0 !important;
   display: flex;
 }
 
+/* Mesajların listelendiği alan */
 .msg_card_body {
   flex: 1;
-  overflow-y: auto;
+  overflow-y: auto; /* İçerik taşıyınca dikey scroll görünsün */
 }
 
+/* Kullanıcı / Bot görsel boyutları */
 .user_img {
   height: 70px;
   width: 70px;
@@ -76,6 +90,7 @@ body, html {
   border: 1.5px solid white;
 }
 
+/* Bot başlık bilgisi */
 .user_info {
   margin-top: auto;
   margin-bottom: auto;
@@ -90,6 +105,7 @@ body, html {
   color: rgba(255,255,255,0.6);
 }
 
+/* Mesaj yazma input */
 .type_msg {
   background-color: #394748 !important;
   border: 0 !important;
@@ -103,6 +119,7 @@ body, html {
   outline: 0px !important;
 }
 
+/* Gönderme butonu */
 .send_btn {
   background-color: #0E3A2F;
   border: 2px solid #0E3A2F;
@@ -120,12 +137,13 @@ body, html {
   border: 2px solid black;
 }
 
+/* Mesaj balonları */
 .msg_cotainer {
   margin-top: auto;
   margin-bottom: auto;
   margin-left: 10px;
   border-radius: 25px;
-  background-color: rgb(82, 172, 255);
+  background-color: rgb(255, 255, 255);
   padding: 10px;
   position: relative;
   color: #000;
@@ -141,6 +159,7 @@ body, html {
   color: #000;
 }
 
+/* Mesaj saatleri */
 .msg_time {
   position: absolute;
   left: 0;
@@ -158,6 +177,19 @@ body, html {
 
 /* Tablonun baloncuk rengiyle uyumlu olması için */
 .my-blue-table {
-  background-color: rgb(82, 172, 255) !important;
+  background-color: rgb(255, 255, 255) !important;
   color: #000 !important;
+}
+
+/* Bildirim çubuğu stili (index.html içindeki .notification-text'i buraya taşıyabilirsiniz) */
+.notification-text {
+  background-color: #dff0d8;
+  color: #3c763d;
+  height: 30px;
+  line-height: 30px;
+  text-align: center;
+  font-family: Arial, sans-serif;
+  font-size: 16px;
+  box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+  width: 100%;
 }
