@@ -85,7 +85,7 @@ class ChatbotAPI:
         # Önbellekteki cevabın geçerli kalma süresi (örnek: 1 saat)
         self.CACHE_EXPIRY_SECONDS = 3600
 
-        # Cross-assistant cache devrede
+        # Cross-assistant cache devrede (global flag)
         self.CROSS_ASSISTANT_CACHE = True
 
         # Flask route tanımları
@@ -263,15 +263,14 @@ class ChatbotAPI:
         new_question: str,
         assistant_id: str,
         threshold=0.8,
-        allow_cross_assistant=True  # YENİ parametre
+        allow_cross_assistant=True
     ):
         """
-        assistant_id'nin önbelleğinde arar. CROSS_ASSISTANT_CACHE=True ise ve allow_cross_assistant=True ise
+        Belirtilen 'assistant_id' önbelleğinde arar. CROSS_ASSISTANT_CACHE=True ise ve allow_cross_assistant=True ise
         diğer asistanların önbelleğini de tarar.
-
         Return: (answer_bytes, matched_question, found_asst_id) veya (None, None, None)
         """
-        # 1) İlgili asistan cache
+        # 1) İlk önce ilgili asistan cache
         ans, matched_q, found_aid = self._search_in_assistant_cache(
             user_id, assistant_id, new_question, threshold
         )
@@ -295,8 +294,8 @@ class ChatbotAPI:
     def _store_in_fuzzy_cache(self, user_id: str, question: str, answer_bytes: bytes, assistant_id: str):
         if not assistant_id:
             return
-
         q_lower = question.strip().lower()
+
         if user_id not in self.fuzzy_cache:
             self.fuzzy_cache[user_id] = {}
         if assistant_id not in self.fuzzy_cache[user_id]:
@@ -351,16 +350,20 @@ class ChatbotAPI:
                 new_assistant_id = aid
                 break
 
-        # Kullanıcı model belirtmezse cross-assistant kapat
+        # Kullanıcı state yapısı (threads dict dahil) yoksa oluştur
+        if user_id not in self.user_states:
+            self.user_states[user_id] = {}
+            # YENİ: Her kullanıcı için "threads" adlı dict
+            self.user_states[user_id]["threads"] = {}
+
+        # Cross-assistant ayarı
         if new_assistant_id:
             assistant_id = new_assistant_id
-            allow_cross = True
+            allow_cross = False
         else:
             assistant_id = old_assistant_id
             allow_cross = False
 
-        if user_id not in self.user_states:
-            self.user_states[user_id] = {}
         self.user_states[user_id]["assistant_id"] = assistant_id
 
         # 4) Önbellek araması
@@ -373,33 +376,32 @@ class ChatbotAPI:
         )
 
         if cached_answer:
-            # 4a) Model mismatch kontrolü
+            # 4a) Model uyuşmazlığı
             user_models = self._extract_models(corrected_message)
             cache_models = self._extract_models(matched_question) if matched_question else set()
 
             if user_models and not user_models.issubset(cache_models):
-                self.logger.info("Model uyuşmazlığı -> cache'i atlıyoruz.")
+                self.logger.info("Model uyuşmazlığı -> cache bypass.")
                 # Cache bypass
             else:
-                # 4b) Asistan cross-assistant'tan geldiyse
-                if found_asst_id:
+                # 4b) Cross-assistant'tan geldiyse
+                if found_asst_id and (new_assistant_id is None):
                     self.user_states[user_id]["assistant_id"] = found_asst_id
 
-                # YENİ: Cache cevabının kendisinde (metninde) hangi model(ler) var?
+                # Cevap içindeki model
                 answer_text = cached_answer.decode("utf-8")
                 models_in_answer = self._extract_models(answer_text)
                 if len(models_in_answer) == 1:
-                    # Tek model => otomatik asistan geçişi
                     only_model = list(models_in_answer)[0]
                     new_aid = self._assistant_id_from_model_name(only_model)
                     if new_aid:
-                        self.logger.info(f"[CACHE] Cevapta tek model: {only_model}, asistan = {new_aid}")
+                        self.logger.info(f"[CACHE] Tek model tespit: {only_model}, asistan={new_aid}")
                         self.user_states[user_id]["assistant_id"] = new_aid
                 elif len(models_in_answer) > 1:
-                    self.logger.info("[CACHE] Cevapta birden çok model var, asistan atamasını es geçiyorum.")
+                    self.logger.info("[CACHE] Birden çok model tespit, asistan atama yok.")
 
-                self.logger.info("Fuzzy cache match bulundu, önbellekten yanıt dönüyor.")
-                time.sleep(2)
+                self.logger.info("Fuzzy cache match bulundu, önbellekten yanıt.")
+                time.sleep(1)
                 return self.app.response_class(cached_answer, mimetype="text/plain")
 
         # 5) Yoksa yeni yanıt üret
@@ -631,25 +633,34 @@ class ChatbotAPI:
             return
 
         try:
-            # Çoklu konuşma (multi-turn) mantığı
-            if "thread_id" not in self.user_states[user_id]:
+            # -----------------------------------------------------------
+            # YENİ: Her asistan için AYRI thread_id saklıyoruz
+            # -----------------------------------------------------------
+            threads_dict = self.user_states[user_id].get("threads", {})
+            thread_id = threads_dict.get(assistant_id)
+
+            if not thread_id:
+                # Bu asistan_id için ilk kez thread açıyoruz
                 new_thread = self.client.beta.threads.create(
                     messages=[{"role": "user", "content": user_message}]
                 )
                 thread_id = new_thread.id
-                self.user_states[user_id]["thread_id"] = thread_id
+                threads_dict[assistant_id] = thread_id
+                self.user_states[user_id]["threads"] = threads_dict
             else:
-                thread_id = self.user_states[user_id]["thread_id"]
+                # Bu asistan için zaten thread_id var, user mesajını ekleyelim
                 self.client.beta.threads.messages.create(
                     thread_id=thread_id,
                     role="user",
                     content=user_message
                 )
 
+            # Asistan çalıştır
             run = self.client.beta.threads.runs.create(
                 thread_id=thread_id,
                 assistant_id=assistant_id
             )
+            # -----------------------------------------------------------
 
             start_time = time.time()
             timeout = 30
