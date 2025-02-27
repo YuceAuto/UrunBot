@@ -32,7 +32,7 @@ def create_tables():
 
 def save_to_db(user_id, question, answer, customer_answer=0):
     """
-    Debug satırları eklendi
+    Eklenen satırın ID'sini döndürür.
     """
     logging.info("[DEBUG] save_to_db called with ->")
     logging.info(f"user_id: {user_id} (type={type(user_id)})")
@@ -43,11 +43,30 @@ def save_to_db(user_id, question, answer, customer_answer=0):
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    # OUTPUT Inserted.id ile eklenen satırın kimlik (ID) değerini geri alıyoruz
     cursor.execute('''
         INSERT INTO conversations (user_id, question, answer, customer_answer)
+        OUTPUT Inserted.id
         VALUES (?, ?, ?, ?)
     ''', (user_id, question, answer, customer_answer))
 
+    new_id = cursor.fetchone()[0]  # Eklenen satırın ID'si
+    conn.commit()
+    conn.close()
+
+    return new_id
+
+def update_customer_answer(conversation_id, value):
+    """
+    Mevcut kaydın customer_answer değerini günceller.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE conversations
+        SET customer_answer = ?
+        WHERE id = ?
+    ''', (value, conversation_id))
     conn.commit()
     conn.close()
 

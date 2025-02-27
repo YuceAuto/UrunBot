@@ -1,6 +1,31 @@
 // ----------------------------------------------------
-// script.js (Tablolu cevap + özel parçalama yaklaşımı)
+// script.js (Tablolu cevap + özel parçalama yaklaşımı) 
+// + Benzersiz user_id üretme (Local Storage)
 // ----------------------------------------------------
+
+// 1) Tarayıcıda kalıcı (localStorage) benzersiz kullanıcı ID oluşturma
+function getOrCreateUserId() {
+  // Daha önce localStorage'da kaydedilmiş mi?
+  let existing = localStorage.getItem("skodaBotUserId");
+  if (existing) {
+    return existing;
+  }
+  // Yeni bir UUID üret
+  let newId;
+  if (window.crypto && crypto.randomUUID) {
+    // Modern tarayıcılarda crypto.randomUUID()
+    newId = crypto.randomUUID();
+  } else {
+    // Fallback (basit bir pseudo-UUID)
+    newId = 'xxxx-4xxx-yxxx-xxxx'.replace(/[xy]/g, function (c) {
+      let r = Math.random() * 16 | 0;
+      let v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+  localStorage.setItem("skodaBotUserId", newId);
+  return newId;
+}
 
 function extractTextContentBlock(fullText) {
   const regex = /\[TextContentBlock\(.*?value=(['"])([\s\S]*?)\1.*?\)\]/;
@@ -150,7 +175,7 @@ function processBotMessage(fullText, uniqueId) {
   // -- ÖZEL KONTROL: 2. baloncuk varsa, son satırı '-' ile başlamıyorsa 3. baloncuğa taşı
   if (newBubbles.length >= 3) {
     let secondBubble = newBubbles[1];
-    let thirdBubble  = newBubbles[2];
+    let thirdBubble = newBubbles[2];
     if (secondBubble.type === "text" && thirdBubble.type === "text") {
       let lines = secondBubble.content.split(/\r?\n/).map(line => line.trim());
       if (lines.length > 0) {
@@ -217,6 +242,9 @@ function processBotMessage(fullText, uniqueId) {
 }
 
 $(document).ready(function () {
+  // 2) Sayfa yüklendiğinde benzersiz user ID al
+  const localUserId = getOrCreateUserId();
+
   $("#messageArea").on("submit", function (e) {
     e.preventDefault();
     const inputField = $("#text");
@@ -254,12 +282,13 @@ $(document).ready(function () {
     $("#messageFormeight").append(botHtml);
     $("#messageFormeight").scrollTop($("#messageFormeight")[0].scrollHeight);
 
+    // 3) Artık user_id: localUserId olarak POST ediyoruz
     fetch("/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         question: rawText,
-        user_id: "default_user"
+        user_id: localUserId
       })
     })
       .then(response => {
